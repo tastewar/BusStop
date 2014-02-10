@@ -1,0 +1,334 @@
+<route_list xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" stop_id="2282" stop_name="Massachusetts Ave @ Medford St">
+	<mode route_type="3" mode_name="Bus">
+		<route route_id="77" route_name="77" />
+		<route route_id="79" route_name="79" />
+		<route route_id="350" route_name="350" />
+	</mode>
+</route_list>
+
+Got to the XML payload -- routelist
+Start tag /route_list
+Attribute:xmlns:xsi text:http://www.w3.org/2001/XMLSchema-instance
+Attribute:xmlns:xsd text:http://www.w3.org/2001/XMLSchema
+Attribute:stop_id text:2282
+Attribute:stop_name text:Massachusetts Ave @ Medford St
+Tag:/route_list text:Massachusetts Ave @ Medford St
+Start tag /route_list/mode
+Attribute:route_type text:3
+Attribute:mode_name text:Bus
+Tag:/route_list/mode text:Bus
+Start tag /route_list/mode/route
+Attribute:route_id text:77
+Attribute:route_name text:77
+End tag /route_list/mode/route
+Start tag /route_list/mode/route
+Attribute:route_id text:79
+Attribute:route_name text:79
+End tag /route_list/mode/route
+Start tag /route_list/mode/route
+Attribute:route_id text:350
+Attribute:route_name text:350
+End tag /route_list/mode/route
+End tag /route_list/mode
+End tag /route_list
+
+<server_time xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" server_dt="1391720196" />
+
+Got to the XML payload -- servertime
+Start tag /server_time
+Attribute:xmlns:xsi text:http://www.w3.org/2001/XMLSchema-instance
+Attribute:xmlns:xsd text:http://www.w3.org/2001/XMLSchema
+Attribute:server_dt text:1391728905
+End tag /server_time
+
+<alerts xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" stop_id="2282" stop_name="Massachusetts Ave @ Medford St">
+	<alert alert_id="21284">
+		<effect_name>Delay</effect_name>
+		<effect>OTHER_EFFECT</effect>
+		<cause_name/>
+		<cause/>
+		<header_text>Route 77 experiencing moderate delays</header_text>
+		<url/>
+		<description_text/>
+		<severity>Moderate</severity>
+		<created_dt>1391721953</created_dt>
+		<last_modified_dt>1391721953</last_modified_dt>
+		<effect_periods>
+		<effect_period effect_start="1391721953" effect_end="1391743767"/></effect_periods>
+		<affected_services>
+		<services>
+		<service route_type="3" mode_name="Bus" route_id="77" route_name="77"/>
+		</services>
+		<elevators/>
+		</affected_services>
+	</alert>
+	<alert alert_id="21315">
+		<effect_name>Delay</effect_name>
+		<effect>OTHER_EFFECT</effect>
+		<cause_name>traffic</cause_name>
+		<cause>OTHER_CAUSE</cause>
+		<header_text>Route 350 experiencing minor delays due to traffic</header_text>
+		<url/>
+		<description_text/>
+		<severity>Minor</severity>
+		<created_dt>1391729340</created_dt>
+		<last_modified_dt>1391729340</last_modified_dt>
+		<effect_periods>
+			<effect_period effect_start="1391729340" effect_end="1391743768"/>
+		</effect_periods>
+		<affected_services>
+			<services>
+			<service route_type="3" mode_name="Bus" route_id="350" route_name="350"/>
+		</services>
+		<elevators/>
+		</affected_services>
+	</alert>
+</alerts>
+
+Got to the XML payload -- alerts
+Start tag /alerts
+Attribute:xmlns:xsi text:http://www.w3.org/2001/XMLSchema-instance
+Attribute:xmlns:xsd text:http://www.w3.org/2001/XMLSchema
+Attribute:stop_id text:2282
+Attribute:stop_name text:Massachusetts Ave @ Medford St
+Tag:/alerts text:Massachusetts Ave @ Medford St
+Start tag /alerts/alert
+Attribute:alert_id text:21284
+Tag:/alerts/alert text:21284
+Start tag /alerts/alert/effect_name
+Tag:/alerts/alert/effect_name text:Delay
+End tag /alerts/alert/effect_name
+Start tag /alerts/alert/effect
+Tag:/alerts/alert/effect text:OTHER_EFFECT
+End tag /alerts/alert/effect
+Start tag /alerts/alert/cause_name
+End tag /alerts/alert/cause_name
+Start tag /alerts/alert/cause
+End tag /alerts/alert/cause
+Start tag /alerts/alert/header_text
+Tag:/alerts/alert/header_text text:Route 77 experiencing moderate delays
+End tag /alerts/alert/header_text
+Start tag /alerts/alert/url
+End tag /alerts/alert/url
+Start tag /alerts/alert/description_text
+End tag /alerts/alert/description_text
+Start tag /alerts/alert/severity
+Tag:/alerts/alert/severity text:Moderate
+End tag /alerts/alert/severity
+Start tag /alerts/alert/created_dt
+Tag:/alerts/alert/created_dt text:1391721953
+End tag /alerts/alert/created_dt
+Start tag /alerts/alert/last_modified_dt
+Tag:/alerts/alert/last_modified_dt text:1391721953
+End tag /alerts/alert/last_modified_dt
+Start tag /alerts/alert/effect_periods
+Start tag /alerts/alert/effect_periods/effect_period
+Attribute:effect_start text:1391721953
+Attribute:effect_end text:1391743065
+End tag /alerts/alert/effect_periods/effect_period
+End tag /alerts/alert/effect_periods
+Start tag /alerts/alert/affected_services
+Start tag /alerts/alert/affected_services/services
+Start tag /alerts/alert/affected_services/services/service
+Attribute:route_type text:3
+Attribute:mode_name text:Bus
+Attribute:route_id text:77
+Attribute:route_name text:77
+End tag /alerts/alert/affected_services/services/service
+End tag /alerts/alert/affected_services/services
+Start tag /alerts/alert/affected_services/elevators
+End tag /alerts/alert/affected_services/elevators
+End tag /alerts/alert/affected_services
+End tag /alerts/alert
+End tag /alerts
+
+
+<?xml version="1.0" encoding="utf-8" ?> 
+<body copyright="All data copyright MBTA 2014.">
+<predictions agencyTitle="MBTA" routeTitle="79" routeTag="79" stopTitle="Massachusetts Ave @ Medford St" stopTag="2282">
+  <direction title="Arlington Heights via Mass. Ave.">
+  <prediction epochTime="1391731737145" seconds="597" minutes="9" isDeparture="false" affectedByLayover="true" dirTag="79_0_var0" vehicle="0683" block="T67_16" tripTag="22125336" />
+  <prediction epochTime="1391735211137" seconds="4071" minutes="67" isDeparture="false" affectedByLayover="true" dirTag="79_0_var0" vehicle="0673" block="T350_171" tripTag="22125341" />
+  <prediction epochTime="1391737053772" seconds="5914" minutes="98" isDeparture="false" affectedByLayover="true" dirTag="79_0_var0" vehicle="0673" block="T350_171" tripTag="22125353" />
+  </direction>
+</predictions>
+<predictions agencyTitle="MBTA" routeTitle="350" routeTag="350" stopTitle="Massachusetts Ave @ Medford St" stopTag="2282">
+  <direction title="Burlington via Mall">
+  <prediction epochTime="1391731215525" seconds="76" minutes="1" isDeparture="false" delayed="true" slowness="0.487" dirTag="350_0_var3" vehicle="0753" block="T350_168" tripTag="22125811" />
+  <prediction epochTime="1391732835572" seconds="1696" minutes="28" isDeparture="false" affectedByLayover="true" dirTag="350_0_var3" vehicle="0615" block="T350_174" tripTag="22125763" />
+  </direction>
+</predictions>
+<predictions agencyTitle="MBTA" routeTitle="77" routeTag="77" stopTitle="Massachusetts Ave @ Medford St" stopTag="2282">
+  <direction title="Arlington Heights via Mass. Ave.">
+  <prediction epochTime="1391731273475" seconds="134" minutes="2" isDeparture="false" dirTag="77_0_var0" vehicle="0671" block="T77_80" tripTag="22125195" />
+  <prediction epochTime="1391731413503" seconds="274" minutes="4" isDeparture="false" dirTag="77_0_var0" vehicle="0601" block="T77_82" tripTag="22125217" />
+  <prediction epochTime="1391731772934" seconds="633" minutes="10" isDeparture="false" dirTag="77_0_var0" vehicle="0287" block="T350_177" tripTag="22125006" />
+  <prediction epochTime="1391731793506" seconds="654" minutes="10" isDeparture="false" dirTag="77_0_var0" vehicle="0633" block="T77_72" tripTag="22125019" />
+  <prediction epochTime="1391732782314" seconds="1643" minutes="27" isDeparture="false" affectedByLayover="true" dirTag="77_0_var0" vehicle="0819" block="T77_70" tripTag="22125076" />
+  </direction>
+</predictions>
+</body>
+
+Got to the XML payload -- predictions
+Start tag /body
+Attribute:copyright text:All data copyright MBTA 2014.
+Tag:/body text:All data copyright MBTA 2014.
+Start tag /body/predictions
+Attribute:agencyTitle text:MBTA
+Attribute:routeTitle text:79
+Attribute:routeTag text:79
+Attribute:stopTitle text:Massachusetts Ave @ Medford St
+Attribute:stopTag text:2282
+Tag:/body/predictions text:2282
+Start tag /body/predictions/direction
+Attribute:title text:Arlington Heights via Mass. Ave.
+Tag:/body/predictions/direction text:Arlington Heights via Mass. Ave.
+Start tag /body/predictions/direction/prediction
+Attribute:epochTime text:1391731737145
+Attribute:seconds text:566
+Attribute:minutes text:9
+Attribute:isDeparture text:false
+Attribute:affectedByLayover text:true
+Attribute:dirTag text:79_0_var0
+Attribute:vehicle text:0683
+Attribute:block text:T67_16
+Attribute:tripTag text:22125336
+End tag /body/predictions/direction/prediction
+Start tag /body/predictions/direction/prediction
+Attribute:epochTime text:1391735211137
+Attribute:seconds text:4040
+Attribute:minutes text:67
+Attribute:isDeparture text:false
+Attribute:affectedByLayover text:true
+Attribute:dirTag text:79_0_var0
+Attribute:vehicle text:0673
+Attribute:block text:T350_171
+Attribute:tripTag text:22125341
+End tag /body/predictions/direction/prediction
+Start tag /body/predictions/direction/prediction
+Attribute:epochTime text:1391737053772
+Attribute:seconds text:5882
+Attribute:minutes text:98
+Attribute:isDeparture text:false
+Attribute:affectedByLayover text:true
+Attribute:dirTag text:79_0_var0
+Attribute:vehicle text:0673
+Attribute:block text:T350_171
+Attribute:tripTag text:22125353
+End tag /body/predictions/direction/prediction
+End tag /body/predictions/direction
+End tag /body/predictions
+Start tag /body/predictions
+Attribute:agencyTitle text:MBTA
+Attribute:routeTitle text:350
+Attribute:routeTag text:350
+Attribute:stopTitle text:Massachusetts Ave @ Medford St
+Attribute:stopTag text:2282
+Tag:/body/predictions text:2282
+Start tag /body/predictions/direction
+Attribute:title text:Burlington via Mall
+Tag:/body/predictions/direction text:Burlington via Mall
+Start tag /body/predictions/direction/prediction
+Attribute:epochTime text:1391731215525
+Attribute:seconds text:44
+Attribute:minutes text:0
+Attribute:isDeparture text:false
+Attribute:delayed text:true
+Attribute:slowness text:0.487
+Attribute:dirTag text:350_0_var3
+Attribute:vehicle text:0753
+Attribute:block text:T350_168
+Attribute:tripTag text:22125811
+End tag /body/predictions/direction/prediction
+Start tag /body/predictions/direction/prediction
+Attribute:epochTime text:1391732835572
+Attribute:seconds text:1664
+Attribute:minutes text:27
+Attribute:isDeparture text:false
+Attribute:affectedByLayover text:true
+Attribute:dirTag text:350_0_var3
+Attribute:vehicle text:0615
+Attribute:block text:T350_174
+Attribute:tripTag text:22125763
+End tag /body/predictions/direction/prediction
+End tag /body/predictions/direction
+End tag /body/predictions
+Start tag /body/predictions
+Attribute:agencyTitle text:MBTA
+Attribute:routeTitle text:77
+Attribute:routeTag text:77
+Attribute:stopTitle text:Massachusetts Ave @ Medford St
+Attribute:stopTag text:2282
+Tag:/body/predictions text:2282
+Start tag /body/predictions/direction
+Attribute:title text:Arlington Heights via Mass. Ave.
+Tag:/body/predictions/direction text:Arlington Heights via Mass. Ave.
+Start tag /body/predictions/direction/prediction
+Attribute:epochTime text:1391731273475
+Attribute:seconds text:102
+Attribute:minutes text:1
+Attribute:isDeparture text:false
+Attribute:dirTag text:77_0_var0
+Attribute:vehicle text:0671
+Attribute:block text:T77_80
+Attribute:tripTag text:22125195
+End tag /body/predictions/direction/prediction
+Start tag /body/predictions/direction/prediction
+Attribute:epochTime text:1391731413503
+Attribute:seconds text:242
+Attribute:minutes text:4
+Attribute:isDeparture text:false
+Attribute:dirTag text:77_0_var0
+Attribute:vehicle text:0601
+Attribute:block text:T77_82
+Attribute:tripTag text:22125217
+End tag /body/predictions/direction/prediction
+Start tag /body/predictions/direction/prediction
+Attribute:epochTime text:1391731772934
+Attribute:seconds text:602
+Attribute:minutes text:10
+Attribute:isDeparture text:false
+Attribute:dirTag text:77_0_var0
+Attribute:vehicle text:0287
+Attribute:block text:T350_177
+Attribute:tripTag text:22125006
+End tag /body/predictions/direction/prediction
+Start tag /body/predictions/direction/prediction
+Attribute:epochTime text:1391731793506
+Attribute:seconds text:622
+Attribute:minutes text:10
+Attribute:isDeparture text:false
+Attribute:dirTag text:77_0_var0
+Attribute:vehicle text:0633
+Attribute:block text:T77_72
+Attribute:tripTag text:22125019
+End tag /body/predictions/direction/prediction
+Start tag /body/predictions/direction/prediction
+Attribute:epochTime text:1391732782314
+Attribute:seconds text:1611
+Attribute:minutes text:26
+Attribute:isDeparture text:false
+Attribute:affectedByLayover text:true
+Attribute:dirTag text:77_0_var0
+Attribute:vehicle text:0819
+Attribute:block text:T77_70
+Attribute:tripTag text:22125076
+End tag /body/predictions/direction/prediction
+End tag /body/predictions/direction
+End tag /body/predictions
+End tag /body
+
+route id vs route tag:
+
+mbta: <route route_id="2427" route_name="24/27"/>
+nextbus: <route tag="2427" title="24/27"/>
+
+mbta route_id == nextbus tag
+mbta route_name == nextbus title
+
+tag/id probably best for internal use/matching; seems to always be a number
+name/title best for display.
+
+Nope; not always a number:
+<route route_id="34" route_name="34"/>
+<route tag="34E" title="34E"/>
