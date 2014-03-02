@@ -1,38 +1,6 @@
-/*
 // Author: Tom Stewart
 // Date: January 2014
 // Version: 1.0
-//
-// -----------------------------------------------------------------------------
-// The intent of this program is to periodically check predicted bus arrival times
-// and display them on a BetaBrite sign. The sign should use one message slot for each route,
-// displaying a string of the form:
-//
-// Route: arr1, arr2, arr3, arr4, arr5
-//
-// where Route is the route number, and the arr times are minutes until the predicted arrival
-// times. If the nth time has the "affectedByLayover" flag set, that prediction will be
-// preceded with a tilde to indicate "approximately," e.g.:
-// 77: 1, 7, 11, ~21, ~32
-// To avoid "flashing" behavior when updating the strings, the sign will use a string file for
-// predicted times, and a text file for each route, and the route file will reference the
-// corresponding prediction string.
-//
-// The sign will cycle through displaying the MBTA current time, the current alert (if any)
-// for the programmed stop, and then the list of routes, one at a time.
-//
-// If a new alert comes up, it will be displayed as a priority text file for 30 seconds, then
-// the priority file will be cancelled and the alert will remain as an ordinary message in
-// sequence.
-//
-// Since alerts are unpredictable, and there can be any number active at a given time, we will
-// allocate memory for them on the fly, and track them in two linked lists: active, and available.
-// When a new alert comes in, we will first look for an available buffer, but if not found, we
-// will allocate a new one. Buffers move to the available list when the alert expires.
-//
-// sign config
-//
-*/
 
 #include <Wire.h>
 #include <stdint.h>
@@ -50,7 +18,10 @@
 #define NextBusPredictionURL NextBusRootURL "predictions&a=mbta&stopId=" StopNumber
 #define MBTAServer "realtime.mbta.com"
 #define MBTARootURL "/developer/api/v1/"
-#define MBTAAPIKey "?api_key=SvZjjUBb9EqhwkT-DYYkyA"
+#define MBTAAPIKeyParam "?api_key="
+// replace next value with personal one
+#define MBTAAPIKeyPrivate "wX9NwuHnZU2ToO7GmGR9uw"
+#define MBTAAPIKey MBTAAPIKeyParam MBTAAPIKeyPrivate
 #define MBTATimeURL MBTARootURL "servertime" MBTAAPIKey
 #define MBTARoutesByStopURL MBTARootURL "routesbystop" MBTAAPIKey "&stop=" StopNumber
 #define MBTAScheduleByStopURL MBTARootURL "schedulebystop" MBTAAPIKey "&stop=" StopNumber "&direction=" Outbound
@@ -61,7 +32,6 @@
 #define MilliSecondsBetweenChecks 10000
 #define buflen 150
 
-
 unsigned long LastCheckTime, MBTAEpochTime, TimeTimeStamp;
 unsigned char numRoutes=0;
 TinyXML xml;
@@ -69,22 +39,24 @@ uint8_t boofer[buflen];
 
 typedef struct _Pred
 {
-	boolean	layover;
-	long	mins;
+  boolean  layover;
+  long     mins;
 } Pred;
 
 typedef struct _RoutePred
 {
-	// NextBus provides up to 5
-	boolean  displayed;
-	char     routeid[12]; // internal use, alpha-numeric uses no punctuation
-        char     routename[12]; // for display
-	Pred     pred[MaxNextBusPredictions];
+// NextBus provides up to 5
+  boolean  displayed;
+  char     routeid[12]; // internal use, alpha-numeric uses no punctuation
+  char     routename[12]; // for display
+  int      activePreds;
+  Pred     pred[MaxNextBusPredictions];
 } RoutePred;
 
 typedef struct _AlertMsg
 {
   boolean        alerted;
+  boolean        displayed;
   unsigned long  MessageID;
   unsigned long  Expiration;
   char           Message[MaxAlertMessageLength+1]; //max 125 characters plus terminating null
@@ -94,36 +66,35 @@ LinkedList<AlertMsg*> ActiveAlertList = LinkedList<AlertMsg*>();
 LinkedList<AlertMsg*> FreeAlertList = LinkedList<AlertMsg*>();
 LinkedList<RoutePred*> RouteList = LinkedList<RoutePred*>();
 
-DigiFi		wifi;
+DigiFi  wifi;
 
 void setup ( )
 {
-	Serial.begin ( 9600 );
-        while(!Serial.available())
-        {
-           Serial.println("Enter any key to begin");
-           delay(1000);
-        }
-        Serial.println ( "Starting setup..." );
-	wifi.begin ( 9600 );
-	while (wifi.ready() != 1)
-	{
-		Serial.println("Error connecting to network");
-		delay(15000);
-	}
-
-	Serial.println("Connected to wifi!");
-	MBTACountRoutesByStop ( );
-	ConfigureDisplay ( );
-	LastCheckTime=millis()-MilliSecondsBetweenChecks;
-        Serial.println ( "Done with setup." );
+  Serial.begin ( 9600 );
+  while(!Serial.available())
+  {
+     Serial.println("Enter any key to begin");
+     delay(1000);
+  }
+  Serial.println ( "Starting setup..." );
+  wifi.begin ( 9600 );
+  while (wifi.ready() != 1)
+  {
+    Serial.println("Error connecting to network");
+    delay(15000);
+  }
+  Serial.println("Connected to wifi!");
+  MBTACountRoutesByStop ( );
+  ConfigureDisplay ( );
+  LastCheckTime=millis()-MilliSecondsBetweenChecks;
+  Serial.println ( "Done with setup." );
 }
 
 void loop ( )
 {
    DHCPandStatusCheck ( );
-   MaybeUpdateDisplay ( );
    MaybeCheckForNewData ( );
+   MaybeUpdateDisplay ( );
 }
 
 void MBTACountRoutesByStop ( )
@@ -134,19 +105,126 @@ void MBTACountRoutesByStop ( )
 
 void ConfigureDisplay ( )
 {
-  // configure 1 file to display the time with the text "MBTA Time: " and a ref to a date string file, space, ref to a time string file + any formatting
-  // configure n text files, 1 for each route with 12 characters for route number, a colon, a space, any formatting, and a reference to a string file
-  // configure n string files, 1 for the predictions of each route. 5 predictions, and for each prediction maybe a tilde, 3 digits, a comma, and a space
-  // divide the remaining files in half, with half being text files that say "Alert: " plus any formatting; the other half as string files 230 bytes long
 }
 
 void DHCPandStatusCheck ( )
 {
 }
 
+void MaybeUpdateDisplayTest ( )
+{
+  // test
+  DisplayTime ( );
+  int i, s;
+  RoutePred   *pR;
+  AlertMsg    *pA;
+  
+  s = RouteList.size ( );
+  Serial.print ( s );
+  Serial.println ( " routes." );
+  for ( i=0; i<s; i++ )
+  {
+    pR = RouteList.get ( i );
+    Serial.print ( "routeid: " );
+    Serial.print ( pR->routeid );
+    Serial.print ( " displayed: " );
+    Serial.print ( pR->displayed ? "true" : "false" );
+    Serial.print ( " routename: " );
+    Serial.print ( pR->routename );
+    Serial.print ( " activePreds: " );
+    Serial.println ( pR->activePreds );
+    
+    int j;
+    Pred  *pP;
+    for ( j=0; j<pR->activePreds; j++ )
+    {
+      pP=&pR->pred[j];
+      Serial.print ( "\tPrediction " );
+      Serial.print ( j );
+      Serial.print ( ": " );
+      Serial.print ( "layover=" );
+      Serial.print ( pP->layover ? "true" : "false" );
+      Serial.print ( " mins=" );
+      Serial.println ( pP->mins );
+    }    
+  }
+  s = ActiveAlertList.size ( );
+  Serial.print ( s );
+  Serial.println ( " alerts." );
+  for ( i=0; i<s; i++ )
+  {
+    pA = ActiveAlertList.get ( i );
+    Serial.print ( i );
+    Serial.print ( ": alerted=" );
+    Serial.print ( pA->alerted ? "true" : "false" );
+    Serial.print ( " displayed=" );
+    Serial.print ( pA->displayed ? "true" : "false" );
+    Serial.print ( " MessageID=" );
+    Serial.print ( pA->MessageID );
+    Serial.print ( " Expiration=" );
+    Serial.println ( pA->Expiration );
+    Serial.println ( pA->Message );
+  }
+}
+
 void MaybeUpdateDisplay ( )
 {
   // for BetaBrite, we'll have to update the run sequence when the list of active alerts changes
+  // for console output, just check for things that haven't been displayed yet
+  // in this function, need to check for alerts that have expired and move them from active to free
+  // as well as remove them from the BB rotation
+  //
+  static unsigned long LastMinuteDisplayed;
+  unsigned long tempMin;
+
+  tempMin = MBTAEpochTime / 60;
+  if ( tempMin != LastMinuteDisplayed )
+  {
+    LastMinuteDisplayed = tempMin;
+    DisplayTime ( );
+  }
+    
+  int i, s;
+  RoutePred   *pR;
+  AlertMsg    *pA;
+  
+  s = RouteList.size ( );
+  for ( i=0; i<s; i++ )
+  {
+    pR = RouteList.get ( i );
+    if ( !pR->displayed )
+    {
+      Serial.print ( pR->routename );
+      Serial.print ( ": " );
+      int j;
+      Pred  *pP;
+      for ( j=0; j<pR->activePreds; j++ )
+      {
+        pP=&pR->pred[j];
+        if ( pP->layover ) Serial.print ( '~' );
+        Serial.print ( pP->mins );
+        if ( j<pR->activePreds-1 ) Serial.print ( ", " );
+      }
+      Serial.println ( "" );
+      pR->displayed = true;
+    }
+  }
+  
+  s = ActiveAlertList.size ( );
+  for ( i=0; i<s; i++ )
+  {
+    pA = ActiveAlertList.get ( i );
+    if ( !pA->alerted )
+    {
+      Serial.println ( pA->Message );
+      pA->alerted = true;
+    }
+    else if ( MBTAEpochTime > pA->Expiration )
+    {
+      // remove from active list
+      // add to free list
+    }
+  }
 }
 
 void MaybeCheckForNewData ( )
@@ -164,56 +242,55 @@ void GetXML ( char *ServerName, char *Page, XMLcallback fcb )
 {
   bool failed=false;
   xml.init ( (uint8_t*)&boofer, buflen, fcb );
-  
-	if ( wifi.connect ( ServerName, 80 ) == 1 )
+  if ( wifi.connect ( ServerName, 80 ) == 1 )
+  {
+    unsigned long tim;
+    wifi.print ( "GET " );
+    wifi.print ( Page );
+    wifi.print ( " HTTP/1.1\r\nHost: " );
+    wifi.println ( ServerName );
+    wifi.println ( "Connection: close" );
+    wifi.println ( "Accept: application/xml\r\n" );
+    tim  = millis ( );
+    while ( true )
+    {
+      if (wifi.available())
+      {
+        tim = millis ( );
+        char c = wifi.read();
+	// "<" should be the first char of the body
+	// we simply drop any characters before that
+	if (c=='<')
 	{
-                unsigned long tim;
-		wifi.print("GET ");
-		wifi.print(Page);
-		wifi.print(" HTTP/1.1\r\nHost: ");
-		wifi.println(ServerName);
-                wifi.println("Connection: close");
-		wifi.println("Accept: application/xml\r\n");
-                tim  = millis ( );
-		while (true)
-		{
-		  if (wifi.available())
-		  {
-                        tim = millis ( );
-			char c = wifi.read();
-			// "<" should be the first char of the body
-			// we simply drop any characters before that
-			if (c=='<')
-			{
-				xml.processChar('<');
-				break;
-			}
-		  }
-                  else if ( millis ( ) - tim > 10000 )
-                  {
-                    Serial.println ( "Timed out :-(" );
-                    failed = true;
-                    break;
-                  }
-		}
-                // now process the XML payload
-                tim  = millis ( );
-		while ( !failed )
-		{
-                   if ( wifi.available())
-                   {
-			char c = wifi.read();
-			xml.processChar(c);
-                        tim = millis ( );
-                   }
-                   if ( !wifi.connected ( ) || millis()-tim>1000 )
-                   {
-                     failed=true;
-                     wifi.stop ( );
-                   }
-		}
-	}
-        else Serial.println ( "Failed to connect :-(" );
+	  xml.processChar('<');
+          break;
+        }
+      }
+      else if ( millis ( ) - tim > 10000 )
+      {
+        Serial.println ( "Timed out :-(" );
+        failed = true;
+        break;
+      }
+    }
+    // now process the XML payload
+    tim  = millis ( );
+    while ( !failed )
+    {
+      if ( wifi.available())
+      {
+        char c = wifi.read();
+        xml.processChar(c);
+        tim = millis ( );
+      }
+      if ( !wifi.connected ( ) || millis()-tim>1000 )
+      {
+        failed=true;
+        wifi.stop ( );
+      }
+    }
+  }
+  else Serial.println ( "Failed to connect :-(" );
 }
 
 void MBTACheckTime ( )
@@ -321,25 +398,28 @@ void RouteListXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen, 
       {
         numRoutes++;
         pCR = new RoutePred;
+        pCR->activePreds = 0;
         RouteList.add ( pCR );
         strlcpy ( pCR->routeid, data, sizeof pCR->routeid );
       }
       else if ( pCR && strcmp ( tagName, "route_name" ) == 0 && strcmp ( pTag, "/route_list/mode/route" == 0 ) && BusMode )
       {
         strlcpy ( pCR->routename, data, sizeof pCR->routename );
+        Serial.print ( data );
+        Serial.print ( ", " );
       }
     }
   }
-/*  else if (statusflags & STATUS_END_TAG)
+  else if (statusflags & STATUS_END_TAG)
   {
     if ( strcmp ( tagName, "/route_list" ) == 0 && numRoutes > 0 ) Serial.println ( "" );
-  }*/
+  }
 }
 
 void AlertsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  char* data,  uint16_t dataLen )
 {
   static char *pTag;
-  static bool PastStartTime;
+  static bool PastStartTime, NewInfo;
   static unsigned long aid;
   static AlertMsg *pCurrentAlert;
   
@@ -350,11 +430,26 @@ void AlertsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  ch
       pTag = tagName;
     }
   }
+  else if (statusflags & STATUS_END_TAG)
+  {
+    if ( strcmp ( tagName, "/alerts/alert" ) == 0 )
+    {
+      if ( NewInfo && pCurrentAlert )
+      {
+        pCurrentAlert->displayed = false;
+        pCurrentAlert->alerted = false;
+      }
+    }
+  }
   else if  (statusflags & STATUS_TAG_TEXT)
   {
     if ( strcmp ( tagName, "/alerts/alert/header_text" ) == 0 && pCurrentAlert )
     {
-      strlcpy ( pCurrentAlert->Message, data, sizeof pCurrentAlert->Message );
+      if ( 0 != strcmp ( pCurrentAlert->Message, data ) )
+      {
+        strlcpy ( pCurrentAlert->Message, data, sizeof pCurrentAlert->Message );
+        NewInfo = true;
+      }
     }
   }
   else if  (statusflags & STATUS_ATTR_TEXT)
@@ -373,6 +468,7 @@ void AlertsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  ch
           if ( pA->MessageID == aid )
           {
             pCurrentAlert = pA;
+            NewInfo = false;
             break;
           }
         }
@@ -390,7 +486,7 @@ void AlertsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  ch
           {
             ActiveAlertList.add ( pCurrentAlert );
             pCurrentAlert->MessageID = aid;
-            pCurrentAlert->alerted = false;
+            NewInfo = true;
           }
         }
       }
@@ -418,7 +514,7 @@ void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen
 {
   static char *pTag;
   static int Minutes, prdno;
-  static bool Approximate;
+  static bool Approximate, NewInfo;
   static RoutePred  *pCR;
   
   if (statusflags & STATUS_START_TAG)
@@ -455,6 +551,7 @@ void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen
           {
             pCR = pR;
             prdno = 0;
+            NewInfo = false;
             break;
           }
         }
@@ -475,15 +572,28 @@ void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen
     {
       if ( Minutes != -1 )
       {
-        pCR->pred[prdno].layover = Approximate;
-        pCR->pred[prdno].mins = Minutes;
+        if ( pCR->pred[prdno].layover != Approximate )
+        {
+          pCR->pred[prdno].layover = Approximate;
+          NewInfo = true;
+        }
+        if ( pCR->pred[prdno].mins != Minutes )
+        {
+          pCR->pred[prdno].mins = Minutes;
+          NewInfo = true;
+        }
         prdno++;
       }
     }
-/*    else if ( strcmp ( tagName, "/body/predictions" ) == 0 )
+    else if ( strcmp ( tagName, "/body/predictions" ) == 0 )
     {
-      Serial.println ( "" );
-    }*/
+      if ( pCR->activePreds != prdno )
+      {
+        pCR->activePreds = prdno;
+        NewInfo = true;
+      }
+      if ( NewInfo ) pCR->displayed = false;
+    }
   }
 }
 

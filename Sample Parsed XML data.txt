@@ -62,27 +62,6 @@ End tag /server_time
 		<elevators/>
 		</affected_services>
 	</alert>
-	<alert alert_id="21315">
-		<effect_name>Delay</effect_name>
-		<effect>OTHER_EFFECT</effect>
-		<cause_name>traffic</cause_name>
-		<cause>OTHER_CAUSE</cause>
-		<header_text>Route 350 experiencing minor delays due to traffic</header_text>
-		<url/>
-		<description_text/>
-		<severity>Minor</severity>
-		<created_dt>1391729340</created_dt>
-		<last_modified_dt>1391729340</last_modified_dt>
-		<effect_periods>
-			<effect_period effect_start="1391729340" effect_end="1391743768"/>
-		</effect_periods>
-		<affected_services>
-			<services>
-			<service route_type="3" mode_name="Bus" route_id="350" route_name="350"/>
-		</services>
-		<elevators/>
-		</affected_services>
-	</alert>
 </alerts>
 
 Got to the XML payload -- alerts
