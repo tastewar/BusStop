@@ -24,3 +24,36 @@ configure 1 file to display the time with the text "MBTA Time: " and a ref to a 
 configure n text files, 1 for each route with 12 characters for route number, a colon, a space, any formatting, and a reference to a string file
 configure n string files, 1 for the predictions of each route. 5 predictions, and for each prediction maybe a tilde, 3 digits, a comma, and a space
 divide the remaining files in half, with half being text files that say "Alert: " plus any formatting; the other half as string files 230 bytes long
+
+^P<label> inserts a string file
+
+Label	Type	Size	Use					Formatting
+=====	====	====	===					==========
+0	T		priority file				Flashing, brightest color
+1	T		"MBTA Time: "				Green, normal font
+2	S		<time>					Green, normal font
+3	T		"Alert: "				Yellow, normal font
+A-?	T		<route>: @companion string
+a-?	S		<companion string files for routes>
+?-Z	T		@3 @companion string
+?-z	S		<companion string files for alerts>
+
+After counting routes, configure sign files and remember the first alert file. Use the Set Run Sequence command to configure which files to display (Write Special Function "." )
+
+Wiring
+======
+
+BetaBrite signs (and some other Alpha signs with RS-232 ports) use a 6 position RJ-12 female jack for the serial interface. Looking into the female jack with the pins on top, the signals are (from L-R): 1-GND, 2-N/C, 3-RXD, 4-TXD, 5-N/C, 6-N/C. I like to use a straight-thru 6-conductor cable to a similar RJ-11 breakout. This must connect to a MAX3232 Breakout (MBOB) as follows:
+
+RJ11-1 GND MBOB-6 GND
+RJ11-3 BRX MBOB-1 T1-OUT
+RJ11-4 BTX MBOB-3 R1-IN
+
+In addition, the MBOB needs to be connected to the DigiX UART (we will use Serial2 (16-TX, 17-RX)) as follows:
+
+DX-16 ATX MBOB-7 T1-IN
+DX-17 ARX MBOB-9 R1-OUT
+
+In addition to the usual power and ground.
+
+Transmit from Arduino (DigiX) goes from pin 16 (TX1 on silkscreen) to T1-IN on the MBOB, thru the MBOB and out T1-OUT which then gets connected to RJ11-3 BetaBrite Receive. Transmit from BetaBrite goes from RJ11-4 to the R1-IN on the MBOB, thru the MBOB and out R1-OUT which then gets connected to the Arduino (DigiX) pin 17 (RX1).

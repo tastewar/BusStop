@@ -1,5 +1,5 @@
 // Author: Tom Stewart
-// Date: January 2014
+// Date: March 2014
 // Version: 1.0
 
 #include <Wire.h>
@@ -31,9 +31,13 @@
 #define MaxAlertMessageLength 230
 #define MilliSecondsBetweenChecks 10000
 #define buflen 150
+#define WiFiResetPin 106
+#define LEDPin 13
+#define MaxWiFiTimeouts 3
 
 unsigned long LastCheckTime, MBTAEpochTime, TimeTimeStamp;
 unsigned char numRoutes=0;
+char FirstAlertFile, WiFiTimeouts;
 TinyXML xml;
 uint8_t boofer[buflen];
 
@@ -47,6 +51,7 @@ typedef struct _RoutePred
 {
 // NextBus provides up to 5
   boolean  displayed;
+  char     signFile;
   char     routeid[12]; // internal use, alpha-numeric uses no punctuation
   char     routename[12]; // for display
   int      activePreds;
@@ -57,6 +62,7 @@ typedef struct _AlertMsg
 {
   boolean        alerted;
   boolean        displayed;
+  char           signFile;
   unsigned long  MessageID;
   unsigned long  Expiration;
   char           Message[MaxAlertMessageLength+1]; //max 125 characters plus terminating null
@@ -70,20 +76,35 @@ DigiFi  wifi;
 
 void setup ( )
 {
+  unsigned long wdp_ms = 2048;
+  unsigned long    wst;
+  pinMode ( WiFiResetPin, OUTPUT );
+  pinMode ( LEDPin, OUTPUT );
+  digitalWrite ( WiFiResetPin, HIGH );
+  digitalWrite ( LEDPin, LOW );
+  ResetWiFi ( );
   Serial.begin ( 9600 );
-  while(!Serial.available())
+  while( !Serial.available ( ) )
   {
-     Serial.println("Enter any key to begin");
-     delay(1000);
+     Serial.println ( "Enter any key to begin" );
+     delay ( 1000 );
   }
   Serial.println ( "Starting setup..." );
-  wifi.begin ( 9600 );
-  while (wifi.ready() != 1)
+  WDT_Enable( WDT, 0x2000 | wdp_ms | ( wdp_ms << 16 ));
+  wst = millis ( );
+  do
   {
-    Serial.println("Error connecting to network");
-    delay(15000);
-  }
-  Serial.println("Connected to wifi!");
+    if ( millis ( ) - wst > 5000 )
+    {
+      Serial.println ( "Error connecting to WiFi network" );
+      ResetWiFi ( );
+      WDT_Restart( WDT );
+      wst = millis ( );
+    }
+    delay ( 10 );
+  } while ( wifi.ready ( ) != 1 );
+  
+  Serial.println ( "Connected to wifi!" );
   MBTACountRoutesByStop ( );
   ConfigureDisplay ( );
   LastCheckTime=millis()-MilliSecondsBetweenChecks;
@@ -92,9 +113,10 @@ void setup ( )
 
 void loop ( )
 {
-   DHCPandStatusCheck ( );
-   MaybeCheckForNewData ( );
-   MaybeUpdateDisplay ( );
+  WDT_Restart( WDT );
+  DHCPandStatusCheck ( );
+  MaybeCheckForNewData ( );
+  MaybeUpdateDisplay ( );
 }
 
 void MBTACountRoutesByStop ( )
@@ -221,8 +243,8 @@ void MaybeUpdateDisplay ( )
     }
     else if ( MBTAEpochTime > pA->Expiration )
     {
-      // remove from active list
-      // add to free list
+      ActiveAlertList.remove ( i );
+      FreeAlertList.add ( pA );
     }
   }
 }
@@ -241,9 +263,11 @@ void MaybeCheckForNewData ( )
 void GetXML ( char *ServerName, char *Page, XMLcallback fcb )
 {
   bool failed=false;
+  ToggleLED ( );
   xml.init ( (uint8_t*)&boofer, buflen, fcb );
   if ( wifi.connect ( ServerName, 80 ) == 1 )
   {
+    WDT_Restart( WDT );
     unsigned long tim;
     wifi.print ( "GET " );
     wifi.print ( Page );
@@ -260,15 +284,17 @@ void GetXML ( char *ServerName, char *Page, XMLcallback fcb )
         char c = wifi.read();
 	// "<" should be the first char of the body
 	// we simply drop any characters before that
-	if (c=='<')
+	if ( c=='<' )
 	{
 	  xml.processChar('<');
           break;
         }
       }
-      else if ( millis ( ) - tim > 10000 )
+      else if ( millis ( ) - tim > 5000 )
       {
+        WDT_Restart( WDT );
         Serial.println ( "Timed out :-(" );
+        if ( ++WiFiTimeouts > MaxWiFiTimeouts ) ResetWiFi ( );
         failed = true;
         break;
       }
@@ -592,22 +618,53 @@ void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen
         pCR->activePreds = prdno;
         NewInfo = true;
       }
-      if ( NewInfo ) pCR->displayed = false;
+      if ( prdno != 0 && NewInfo ) pCR->displayed = false;
     }
   }
 }
 
 void DisplayTime ( void )
 {
-  uint32_t nowish = MBTAEpochTime - SECONDS_FROM_1970_TO_2000;
-  DateTime dt(nowish);
-  Serial.print(dt.year()); Serial.print("/"); Serial.print(dt.month()); Serial.print("/"); 
-  Serial.print(dt.day()); Serial.print(" "); 
-  Serial.print(dt.hour()); Serial.print(":"); 
-  unsigned char m=dt.minute();
+  DateTime dt ( MBTAEpochTime );
+  Serial.print ( dt.year( ) ); Serial.print ( "/" ); Serial.print ( dt.month ( ) ); Serial.print ( "/" ); 
+  Serial.print ( dt.day( ) ); Serial.print ( " " ); 
+  Serial.print ( dt.hour( ) ); Serial.print ( ":" ); 
+  unsigned char m=dt.minute ( );
   if ( m < 10 ) Serial.print ( '0' );
-  Serial.print(m); Serial.print(":");
-  unsigned char s=dt.second();
+  Serial.print ( m ); Serial.print ( ":" );
+  unsigned char s=dt.second ( );
   if ( s < 10 ) Serial.print ( '0' );
-  Serial.print(s); Serial.println ( " GMT" );
+  Serial.print ( s ); Serial.println ( " GMT" );
 }
+
+void ResetWiFi ( void )
+{
+  int i;
+  // requires SJ4 to be soldered closed (non-default) and SJ3 to be cut open (default)
+  Serial.println ( "* * * * Resetting WiFi module! * * * *" );
+  digitalWrite ( WiFiResetPin, LOW );
+  delay ( 15 );
+  digitalWrite ( WiFiResetPin, HIGH );
+  wifi.begin ( 9600 );
+  for ( i=0; i<100; i++ )
+  {
+    ToggleLED ( );
+    delay ( 20 );
+  }
+}
+
+void ToggleLED ( )
+{
+  static bool ledon=false;
+  if ( ledon )
+  {
+    ledon = false;
+    digitalWrite ( LEDPin, HIGH );
+  }
+  else
+  {
+    ledon = true;
+    digitalWrite ( LEDPin, LOW );
+  }
+}
+
