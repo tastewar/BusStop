@@ -1,3 +1,6 @@
+#include <BB2DEFS.h>
+#include <BETABRITE2.h>
+
 // Author: Tom Stewart
 // Date: March 2014
 // Version: 1.0
@@ -27,17 +30,31 @@
 #define MBTAScheduleByStopURL MBTARootURL "schedulebystop" MBTAAPIKey "&stop=" StopNumber "&direction=" Outbound
 #define MBTAAlertsByStopURL MBTARootURL "alertsbystop" MBTAAPIKey "&stop=" StopNumber
 #define MaxNextBusPredictions 5
-#define MaxPriorityMessageLength 125
+#define MaxPriorityMessageLength BB_MAX_STRING_FILE_SIZE
 #define MaxAlertMessageLength 230
 #define MilliSecondsBetweenChecks 10000
 #define buflen 150
 #define WiFiResetPin 106
 #define LEDPin 13
 #define MaxWiFiTimeouts 3
+#define TimeLabelFile '1'
+#define TimeStringFile '2'
+#define AlertLabelFile '3'
+#define RunSeqMax 32
+
+//#define DEBUG
+
+#if defined DEBUG
+#define DebugOutLn(a) Serial.println(a)
+#define DebugOut(a) Serial.print(a)
+#else
+#define DebugOutLn(a)
+#define DebugOut(a)
+#endif
 
 unsigned long LastCheckTime, MBTAEpochTime, TimeTimeStamp;
 unsigned char numRoutes=0;
-char FirstAlertFile, WiFiTimeouts;
+char signFile='A', firstAlertFile, WiFiTimeouts, lastRunSeq[RunSeqMax];
 TinyXML xml;
 uint8_t boofer[buflen];
 
@@ -73,9 +90,11 @@ LinkedList<AlertMsg*> FreeAlertList = LinkedList<AlertMsg*>();
 LinkedList<RoutePred*> RouteList = LinkedList<RoutePred*>();
 
 DigiFi  wifi;
+BETABRITE theSign ( Serial2 );
 
 void setup ( )
 {
+  WDT_Disable(WDT);
   unsigned long wdp_ms = 2048;
   unsigned long    wst;
   pinMode ( WiFiResetPin, OUTPUT );
@@ -83,20 +102,24 @@ void setup ( )
   digitalWrite ( WiFiResetPin, HIGH );
   digitalWrite ( LEDPin, LOW );
   ResetWiFi ( );
+#if defined DEBUG
   Serial.begin ( 9600 );
   while( !Serial.available ( ) )
   {
-     Serial.println ( "Enter any key to begin" );
+     DebugOutLn ( "Enter any key to begin" );
      delay ( 1000 );
   }
-  Serial.println ( "Starting setup..." );
+#endif
+  DebugOutLn ( "Starting setup..." );
+  Serial2.begin ( 9600 );
+  theSign.WritePriorityTextFile ( "BusStopSign v1.0 starting up..." );
   WDT_Enable( WDT, 0x2000 | wdp_ms | ( wdp_ms << 16 ));
   wst = millis ( );
   do
   {
     if ( millis ( ) - wst > 5000 )
     {
-      Serial.println ( "Error connecting to WiFi network" );
+      DebugOutLn ( "Error connecting to WiFi network" );
       ResetWiFi ( );
       WDT_Restart( WDT );
       wst = millis ( );
@@ -104,11 +127,11 @@ void setup ( )
     delay ( 10 );
   } while ( wifi.ready ( ) != 1 );
   
-  Serial.println ( "Connected to wifi!" );
+  DebugOutLn ( "Connected to wifi!" );
   MBTACountRoutesByStop ( );
   ConfigureDisplay ( );
   LastCheckTime=millis()-MilliSecondsBetweenChecks;
-  Serial.println ( "Done with setup." );
+  DebugOutLn ( "Done with setup." );
 }
 
 void loop ( )
@@ -121,12 +144,65 @@ void loop ( )
 
 void MBTACountRoutesByStop ( )
 {
-  Serial.println ( "Getting list of routes for the stop." );
+  DebugOutLn ( "Getting list of routes for the stop." );
   GetXML ( MBTAServer, MBTARoutesByStopURL, RouteListXMLCB );
 }
 
 void ConfigureDisplay ( )
 {
+  int i, s;
+  RoutePred   *pR;
+  AlertMsg    *pA;
+  char AlertFileText[5]="\0203\020a"; // call file 3, call file 'a'
+  
+  theSign.CancelPriorityTextFile ( );
+  // memory configuration
+  theSign.StartMemoryConfigurationCommand ( );
+  // MBTA Time label
+  theSign.SetMemoryConfigurationSection ( TimeLabelFile, 1, 20, BB_SFFT_TEXT, true, BB_RT_NEVER );
+  // time string
+  theSign.SetMemoryConfigurationSection ( TimeStringFile, 1, 36, BB_SFFT_STRING );
+  // Alert label
+  theSign.SetMemoryConfigurationSection ( AlertLabelFile, 1, 16, BB_SFFT_STRING );
+  // route labels
+  theSign.SetMemoryConfigurationSection ( 'A', numRoutes, 24, BB_SFFT_TEXT, true, BB_RT_NEVER );
+  // route predictions
+  theSign.SetMemoryConfigurationSection ( 'a', numRoutes, 36, BB_SFFT_STRING );
+  firstAlertFile = signFile;
+  // alert text files
+  theSign.SetMemoryConfigurationSection ( signFile, 26-numRoutes, 12, BB_SFFT_TEXT, true, BB_RT_NEVER );
+  // alert string files
+  theSign.SetMemoryConfigurationSection ( signFile+0x20, 26-numRoutes, BB_MAX_STRING_FILE_SIZE, BB_SFFT_STRING );
+  theSign.EndMemoryConfigurationCommand ( );
+  //
+  // static content
+  //
+  theSign.BeginCommand ( );
+  theSign.BeginNestedCommand ( );
+  theSign.WriteTextFileNested ( TimeLabelFile, "T Time: \0202 GMT", BB_COL_GREEN );
+  theSign.EndNestedCommand ( );
+  theSign.BeginNestedCommand ( );
+  theSign.WriteStringFileNested ( AlertLabelFile, "Alert: " );
+  theSign.EndNestedCommand ( );
+  s = RouteList.size ( );
+  for ( i=0; i<s; i++ )
+  {
+    char  buf[64];
+    pR = RouteList.get ( i );
+    sprintf ( buf, "%s: %c%c", pR->routename, BB_FC_CALLSTRING, pR->signFile+0x20 );
+    theSign.BeginNestedCommand ( );
+    theSign.WriteTextFileNested ( pR->signFile, buf, BB_COL_YELLOW );
+    theSign.EndNestedCommand ( );
+  }
+  for ( i=0; i<(26-s); i++ )
+  {
+    AlertFileText[3]=signFile+0x20+i; // lower case version of Alert file label
+    theSign.BeginNestedCommand ( );
+    theSign.WriteTextFileNested ( signFile+i, AlertFileText, BB_COL_AMBER );
+    theSign.EndNestedCommand ( );
+  }
+  theSign.EndCommand ( );
+  //theSign.SetRunSequence ( BB_RS_SEQUENCE, true, "1ABCD" );
 }
 
 void DHCPandStatusCheck ( )
@@ -135,57 +211,58 @@ void DHCPandStatusCheck ( )
 
 void MaybeUpdateDisplayTest ( )
 {
+  char  strbuf[256];
   // test
-  DisplayTime ( );
+  DisplayTime ( strbuf );
   int i, s;
   RoutePred   *pR;
   AlertMsg    *pA;
   
   s = RouteList.size ( );
-  Serial.print ( s );
-  Serial.println ( " routes." );
+  DebugOut ( s );
+  DebugOutLn ( " routes." );
   for ( i=0; i<s; i++ )
   {
     pR = RouteList.get ( i );
-    Serial.print ( "routeid: " );
-    Serial.print ( pR->routeid );
-    Serial.print ( " displayed: " );
-    Serial.print ( pR->displayed ? "true" : "false" );
-    Serial.print ( " routename: " );
-    Serial.print ( pR->routename );
-    Serial.print ( " activePreds: " );
-    Serial.println ( pR->activePreds );
+    DebugOut ( "routeid: " );
+    DebugOut ( pR->routeid );
+    DebugOut ( " displayed: " );
+    DebugOut ( pR->displayed ? "true" : "false" );
+    DebugOut ( " routename: " );
+    DebugOut ( pR->routename );
+    DebugOut ( " activePreds: " );
+    DebugOutLn ( pR->activePreds );
     
     int j;
     Pred  *pP;
     for ( j=0; j<pR->activePreds; j++ )
     {
       pP=&pR->pred[j];
-      Serial.print ( "\tPrediction " );
-      Serial.print ( j );
-      Serial.print ( ": " );
-      Serial.print ( "layover=" );
-      Serial.print ( pP->layover ? "true" : "false" );
-      Serial.print ( " mins=" );
-      Serial.println ( pP->mins );
+      DebugOut ( "\tPrediction " );
+      DebugOut ( j );
+      DebugOut ( ": " );
+      DebugOut ( "layover=" );
+      DebugOut ( pP->layover ? "true" : "false" );
+      DebugOut ( " mins=" );
+      DebugOutLn ( pP->mins );
     }    
   }
   s = ActiveAlertList.size ( );
-  Serial.print ( s );
-  Serial.println ( " alerts." );
+  DebugOut ( s );
+  DebugOutLn ( " alerts." );
   for ( i=0; i<s; i++ )
   {
     pA = ActiveAlertList.get ( i );
-    Serial.print ( i );
-    Serial.print ( ": alerted=" );
-    Serial.print ( pA->alerted ? "true" : "false" );
-    Serial.print ( " displayed=" );
-    Serial.print ( pA->displayed ? "true" : "false" );
-    Serial.print ( " MessageID=" );
-    Serial.print ( pA->MessageID );
-    Serial.print ( " Expiration=" );
-    Serial.println ( pA->Expiration );
-    Serial.println ( pA->Message );
+    DebugOut ( i );
+    DebugOut ( ": alerted=" );
+    DebugOut ( pA->alerted ? "true" : "false" );
+    DebugOut ( " displayed=" );
+    DebugOut ( pA->displayed ? "true" : "false" );
+    DebugOut ( " MessageID=" );
+    DebugOut ( pA->MessageID );
+    DebugOut ( " Expiration=" );
+    DebugOutLn ( pA->Expiration );
+    DebugOutLn ( pA->Message );
   }
 }
 
@@ -198,14 +275,16 @@ void MaybeUpdateDisplay ( )
   //
   static unsigned long LastMinuteDisplayed;
   unsigned long tempMin;
+  char  runSeqIndex=0, strbuf[256], tempRunSeq[RunSeqMax];
 
   tempMin = MBTAEpochTime / 60;
   if ( tempMin != LastMinuteDisplayed )
   {
     LastMinuteDisplayed = tempMin;
-    DisplayTime ( );
+    DisplayTime ( strbuf );
   }
-    
+  tempRunSeq[runSeqIndex++]=TimeLabelFile;
+
   int i, s;
   RoutePred   *pR;
   AlertMsg    *pA;
@@ -216,20 +295,26 @@ void MaybeUpdateDisplay ( )
     pR = RouteList.get ( i );
     if ( !pR->displayed )
     {
-      Serial.print ( pR->routename );
-      Serial.print ( ": " );
       int j;
       Pred  *pP;
+      strbuf[0]='\0';
       for ( j=0; j<pR->activePreds; j++ )
       {
+        char  numbuff[6];
+        
         pP=&pR->pred[j];
-        if ( pP->layover ) Serial.print ( '~' );
-        Serial.print ( pP->mins );
-        if ( j<pR->activePreds-1 ) Serial.print ( ", " );
+        if ( pP->layover ) strcat ( strbuf, "*" );
+        sprintf ( numbuff, "%d", pP->mins );
+        strcat ( strbuf, numbuff );
+        if ( j<pR->activePreds-1 ) strcat ( strbuf, ", " );
       }
-      Serial.println ( "" );
+      theSign.WriteStringFile ( pR->signFile+0x20, strbuf );
+      DebugOut ( pR->routename );
+      DebugOut ( ": " );
+      DebugOutLn ( strbuf );
       pR->displayed = true;
     }
+    if ( pR->activePreds != 0 ) tempRunSeq[runSeqIndex++]=pR->signFile;
   }
   
   s = ActiveAlertList.size ( );
@@ -238,14 +323,23 @@ void MaybeUpdateDisplay ( )
     pA = ActiveAlertList.get ( i );
     if ( !pA->alerted )
     {
-      Serial.println ( pA->Message );
+      DebugOutLn ( pA->Message );
       pA->alerted = true;
     }
-    else if ( MBTAEpochTime > pA->Expiration )
+    if ( MBTAEpochTime > pA->Expiration )
     {
       ActiveAlertList.remove ( i );
       FreeAlertList.add ( pA );
     }
+    else tempRunSeq[runSeqIndex++]=pR->signFile;
+  }
+  tempRunSeq[runSeqIndex]='\0';
+  if ( 0 != strcmp ( tempRunSeq, lastRunSeq ) )
+  {
+    strcpy ( lastRunSeq, tempRunSeq );
+    theSign.SetRunSequence ( BB_RS_SEQUENCE, true, tempRunSeq );
+    DebugOut ( "RunSeq: " );
+    DebugOutLn ( tempRunSeq );
   }
 }
 
@@ -293,7 +387,7 @@ void GetXML ( char *ServerName, char *Page, XMLcallback fcb )
       else if ( millis ( ) - tim > 5000 )
       {
         WDT_Restart( WDT );
-        Serial.println ( "Timed out :-(" );
+        DebugOutLn ( "Timed out :-(" );
         if ( ++WiFiTimeouts > MaxWiFiTimeouts ) ResetWiFi ( );
         failed = true;
         break;
@@ -316,24 +410,24 @@ void GetXML ( char *ServerName, char *Page, XMLcallback fcb )
       }
     }
   }
-  else Serial.println ( "Failed to connect :-(" );
+  else DebugOutLn ( "Failed to connect :-(" );
 }
 
 void MBTACheckTime ( )
 {
-  Serial.println ( "Checking the time..." );
+  DebugOutLn ( "Checking the time..." );
   GetXML ( MBTAServer, MBTATimeURL, ServerTimeXMLCB );
 }
 
 void MBTACheckAlerts ( )
 {
-  Serial.println ( "Checking alerts..." );
+  DebugOutLn ( "Checking alerts..." );
   GetXML ( MBTAServer, MBTAAlertsByStopURL, AlertsXMLCB );
 }
 
 void NextBusCheckPredictions ( )
 {
-  Serial.println ( "Checking predictions..." );
+  DebugOutLn ( "Checking predictions..." );
   GetXML ( NextBusServer, NextBusPredictionURL, PredictionsXMLCB );
 }
 
@@ -343,35 +437,35 @@ void XML_GenericCallback ( uint8_t statusflags, char* tagName,  uint16_t tagName
   {
     if ( tagNameLen )
     {
-      Serial.print("Start tag ");
-      Serial.println(tagName);
+      DebugOut("Start tag ");
+      DebugOutLn(tagName);
     }
   }
   else if  (statusflags & STATUS_END_TAG)
   {
-    Serial.print("End tag ");
-    Serial.println(tagName);
+    DebugOut("End tag ");
+    DebugOutLn(tagName);
   }
   else if  (statusflags & STATUS_TAG_TEXT)
   {
-    Serial.print("Tag:");
-    Serial.print(tagName);
-    Serial.print(" text:");
-    Serial.println(data);
+    DebugOut("Tag:");
+    DebugOut(tagName);
+    DebugOut(" text:");
+    DebugOutLn(data);
   }
   else if  (statusflags & STATUS_ATTR_TEXT)
   {
-    Serial.print("Attribute:");
-    Serial.print(tagName);
-    Serial.print(" text:");
-    Serial.println(data);
+    DebugOut("Attribute:");
+    DebugOut(tagName);
+    DebugOut(" text:");
+    DebugOutLn(data);
   }
   else if  (statusflags & STATUS_ERROR)
   {
-    Serial.print("XML Parsing error  Tag:");
-    Serial.print(tagName);
-    Serial.print(" text:");
-    Serial.println(data);
+    DebugOut("XML Parsing error  Tag:");
+    DebugOut(tagName);
+    DebugOut(" text:");
+    DebugOutLn(data);
   }
 }
 
@@ -425,20 +519,21 @@ void RouteListXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen, 
         numRoutes++;
         pCR = new RoutePred;
         pCR->activePreds = 0;
+        pCR->signFile = signFile++;
         RouteList.add ( pCR );
         strlcpy ( pCR->routeid, data, sizeof pCR->routeid );
       }
       else if ( pCR && strcmp ( tagName, "route_name" ) == 0 && strcmp ( pTag, "/route_list/mode/route" == 0 ) && BusMode )
       {
         strlcpy ( pCR->routename, data, sizeof pCR->routename );
-        Serial.print ( data );
-        Serial.print ( ", " );
+        DebugOut ( data );
+        DebugOut ( ", " );
       }
     }
   }
   else if (statusflags & STATUS_END_TAG)
   {
-    if ( strcmp ( tagName, "/route_list" ) == 0 && numRoutes > 0 ) Serial.println ( "" );
+    if ( strcmp ( tagName, "/route_list" ) == 0 && numRoutes > 0 ) DebugOutLn ( "" );
   }
 }
 
@@ -507,6 +602,7 @@ void AlertsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  ch
           else
           {
             pCurrentAlert = new AlertMsg;
+            pCurrentAlert->signFile = signFile++;
           }
           if ( pCurrentAlert )
           {
@@ -623,25 +719,19 @@ void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen
   }
 }
 
-void DisplayTime ( void )
+void DisplayTime ( char *buf )
 {
   DateTime dt ( MBTAEpochTime );
-  Serial.print ( dt.year( ) ); Serial.print ( "/" ); Serial.print ( dt.month ( ) ); Serial.print ( "/" ); 
-  Serial.print ( dt.day( ) ); Serial.print ( " " ); 
-  Serial.print ( dt.hour( ) ); Serial.print ( ":" ); 
-  unsigned char m=dt.minute ( );
-  if ( m < 10 ) Serial.print ( '0' );
-  Serial.print ( m ); Serial.print ( ":" );
-  unsigned char s=dt.second ( );
-  if ( s < 10 ) Serial.print ( '0' );
-  Serial.print ( s ); Serial.println ( " GMT" );
+  sprintf ( buf, "%d/%d/%d %02d:%02d", dt.year(), dt.month(), dt.day(), dt.hour(), dt.minute() );
+  theSign.WriteStringFile ( TimeStringFile, buf );
+  DebugOutLn ( buf );
 }
 
 void ResetWiFi ( void )
 {
   int i;
   // requires SJ4 to be soldered closed (non-default) and SJ3 to be cut open (default)
-  Serial.println ( "* * * * Resetting WiFi module! * * * *" );
+  DebugOutLn ( "* * * * Resetting WiFi module! * * * *" );
   digitalWrite ( WiFiResetPin, LOW );
   delay ( 15 );
   digitalWrite ( WiFiResetPin, HIGH );

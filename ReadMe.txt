@@ -26,19 +26,20 @@ configure n string files, 1 for the predictions of each route. 5 predictions, an
 divide the remaining files in half, with half being text files that say "Alert: " plus any formatting; the other half as string files 230 bytes long
 
 ^P<label> inserts a string file
+add 4 bytes for a basic text file, plus 2 bytes for every ref, plus the string
 
-Label	Type	Size	Use					Formatting
-=====	====	====	===					==========
-0	T		priority file				Flashing, brightest color
-1	T		"MBTA Time: "				Green, normal font
-2	S		<time>					Green, normal font
-3	T		"Alert: "				Yellow, normal font
-A-?	T		<route>: @companion string
-a-?	S		<companion string files for routes>
-?-Z	T		@3 @companion string
-?-z	S		<companion string files for alerts>
+Label	Type	RawSize	Size	Use					Formatting
+=====	====	====	====	===					==========
+0	T	XXX	XXX	priority file				Flashing, brightest color
+1	T	10	20	"MBTA Time: "@2				Green
+2	S	32	36	<time>					-none-
+3	S	10	16	"Alert: "				-none-
+A-?	T	14	24	<route>: @companion string		Yellow
+a-?	S	32	36	<companion string files for routes>	-none-
+?-Z	T	0	12	@3@companion string			Amber
+?-z	S	125	125	<companion string files for alerts>	-none-
 
-After counting routes, configure sign files and remember the first alert file. Use the Set Run Sequence command to configure which files to display (Write Special Function "." )
+After counting routes, configure sign files and remember the first alert file. All the text files should be setup to never display, and we will use the Set Run Sequence command to configure which files to display (Write Special Function "." )
 
 Wiring
 ======
