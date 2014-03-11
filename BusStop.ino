@@ -3,7 +3,9 @@
 
 // Author: Tom Stewart
 // Date: March 2014
-// Version: 1.0
+// Version: 1.2
+
+#define Version "1.2"
 
 #include <Wire.h>
 #include <stdint.h>
@@ -32,7 +34,8 @@
 #define MaxNextBusPredictions 5
 #define MaxPriorityMessageLength BB_MAX_STRING_FILE_SIZE
 #define MaxAlertMessageLength 230
-#define MilliSecondsBetweenChecks 10000
+#define MilliSecondsBetweenChecks 15000
+#define PriorityTime 20000
 #define buflen 150
 #define WiFiResetPin 106
 #define LEDPin 13
@@ -52,9 +55,10 @@
 #define DebugOut(a)
 #endif
 
-unsigned long LastCheckTime, MBTAEpochTime, TimeTimeStamp;
+unsigned long LastCheckTime, MBTAEpochTime, TimeTimeStamp, LastPriorityDisplayTime;
 unsigned char numRoutes=0;
 char signFile='A', firstAlertFile, WiFiTimeouts, lastRunSeq[RunSeqMax];
+bool PriorityOn;
 TinyXML xml;
 uint8_t boofer[buflen];
 
@@ -95,6 +99,7 @@ BETABRITE theSign ( Serial2 );
 void setup ( )
 {
   WDT_Disable(WDT);
+  Serial2.begin ( 9600 );
   unsigned long wdp_ms = 2048;
   unsigned long    wst;
   pinMode ( WiFiResetPin, OUTPUT );
@@ -111,8 +116,7 @@ void setup ( )
   }
 #endif
   DebugOutLn ( "Starting setup..." );
-  Serial2.begin ( 9600 );
-  theSign.WritePriorityTextFile ( "BusStopSign v1.0 starting up..." );
+  theSign.WritePriorityTextFile ( "BusStopSign v" Version " starting up..." );
   WDT_Enable( WDT, 0x2000 | wdp_ms | ( wdp_ms << 16 ));
   wst = millis ( );
   do
@@ -121,22 +125,22 @@ void setup ( )
     {
       DebugOutLn ( "Error connecting to WiFi network" );
       ResetWiFi ( );
-      WDT_Restart( WDT );
+      ImStillAlive ( );
       wst = millis ( );
     }
     delay ( 10 );
   } while ( wifi.ready ( ) != 1 );
   
-  DebugOutLn ( "Connected to wifi!" );
+  theSign.WritePriorityTextFile ( "Connected to wifi!" );
   MBTACountRoutesByStop ( );
   ConfigureDisplay ( );
-  LastCheckTime=millis()-MilliSecondsBetweenChecks;
+  LastCheckTime = millis ( ) - MilliSecondsBetweenChecks;
   DebugOutLn ( "Done with setup." );
 }
 
 void loop ( )
 {
-  WDT_Restart( WDT );
+  ImStillAlive( );
   DHCPandStatusCheck ( );
   MaybeCheckForNewData ( );
   MaybeUpdateDisplay ( );
@@ -150,7 +154,7 @@ void MBTACountRoutesByStop ( )
 
 void ConfigureDisplay ( )
 {
-  int i, s;
+  unsigned int i, s;
   RoutePred   *pR;
   AlertMsg    *pA;
   char AlertFileText[5]="\0203\020a"; // call file 3, call file 'a'
@@ -202,68 +206,10 @@ void ConfigureDisplay ( )
     theSign.EndNestedCommand ( );
   }
   theSign.EndCommand ( );
-  //theSign.SetRunSequence ( BB_RS_SEQUENCE, true, "1ABCD" );
 }
 
 void DHCPandStatusCheck ( )
 {
-}
-
-void MaybeUpdateDisplayTest ( )
-{
-  char  strbuf[256];
-  // test
-  DisplayTime ( strbuf );
-  int i, s;
-  RoutePred   *pR;
-  AlertMsg    *pA;
-  
-  s = RouteList.size ( );
-  DebugOut ( s );
-  DebugOutLn ( " routes." );
-  for ( i=0; i<s; i++ )
-  {
-    pR = RouteList.get ( i );
-    DebugOut ( "routeid: " );
-    DebugOut ( pR->routeid );
-    DebugOut ( " displayed: " );
-    DebugOut ( pR->displayed ? "true" : "false" );
-    DebugOut ( " routename: " );
-    DebugOut ( pR->routename );
-    DebugOut ( " activePreds: " );
-    DebugOutLn ( pR->activePreds );
-    
-    int j;
-    Pred  *pP;
-    for ( j=0; j<pR->activePreds; j++ )
-    {
-      pP=&pR->pred[j];
-      DebugOut ( "\tPrediction " );
-      DebugOut ( j );
-      DebugOut ( ": " );
-      DebugOut ( "layover=" );
-      DebugOut ( pP->layover ? "true" : "false" );
-      DebugOut ( " mins=" );
-      DebugOutLn ( pP->mins );
-    }    
-  }
-  s = ActiveAlertList.size ( );
-  DebugOut ( s );
-  DebugOutLn ( " alerts." );
-  for ( i=0; i<s; i++ )
-  {
-    pA = ActiveAlertList.get ( i );
-    DebugOut ( i );
-    DebugOut ( ": alerted=" );
-    DebugOut ( pA->alerted ? "true" : "false" );
-    DebugOut ( " displayed=" );
-    DebugOut ( pA->displayed ? "true" : "false" );
-    DebugOut ( " MessageID=" );
-    DebugOut ( pA->MessageID );
-    DebugOut ( " Expiration=" );
-    DebugOutLn ( pA->Expiration );
-    DebugOutLn ( pA->Message );
-  }
 }
 
 void MaybeUpdateDisplay ( )
@@ -277,13 +223,14 @@ void MaybeUpdateDisplay ( )
   unsigned long tempMin;
   char  runSeqIndex=0, strbuf[256], tempRunSeq[RunSeqMax];
 
+  MaybeCancelAlert ( );
   tempMin = MBTAEpochTime / 60;
   if ( tempMin != LastMinuteDisplayed )
   {
     LastMinuteDisplayed = tempMin;
     DisplayTime ( strbuf );
   }
-  tempRunSeq[runSeqIndex++]=TimeLabelFile;
+  tempRunSeq[runSeqIndex++] = TimeLabelFile;
 
   int i, s;
   RoutePred   *pR;
@@ -306,7 +253,7 @@ void MaybeUpdateDisplay ( )
         if ( pP->layover ) strcat ( strbuf, "*" );
         sprintf ( numbuff, "%d", pP->mins );
         strcat ( strbuf, numbuff );
-        if ( j<pR->activePreds-1 ) strcat ( strbuf, ", " );
+        if ( j < pR->activePreds - 1 ) strcat ( strbuf, ", " );
       }
       theSign.WriteStringFile ( pR->signFile+0x20, strbuf );
       DebugOut ( pR->routename );
@@ -314,24 +261,41 @@ void MaybeUpdateDisplay ( )
       DebugOutLn ( strbuf );
       pR->displayed = true;
     }
-    if ( pR->activePreds != 0 ) tempRunSeq[runSeqIndex++]=pR->signFile;
+    if ( pR->activePreds != 0 )
+    {
+      tempRunSeq[runSeqIndex++]=pR->signFile;
+      if ( pR->pred[0].mins == 0 && !PriorityOn )
+      {
+        LastPriorityDisplayTime = millis ( );
+        PriorityOn = true;
+        sprintf ( strbuf, "<<<%s: NOW!>>>", pR->routename );
+        theSign.WritePriorityTextFile ( strbuf, BB_COL_ORANGE, BB_DP_TOPLINE, BB_DM_FLASH );
+      }
+    }
   }
   
   s = ActiveAlertList.size ( );
   for ( i=0; i<s; i++ )
   {
     pA = ActiveAlertList.get ( i );
-    if ( !pA->alerted )
-    {
-      DebugOutLn ( pA->Message );
-      pA->alerted = true;
-    }
     if ( MBTAEpochTime > pA->Expiration )
     {
       ActiveAlertList.remove ( i );
       FreeAlertList.add ( pA );
+      break;
     }
-    else tempRunSeq[runSeqIndex++]=pR->signFile;
+    if ( !pA->alerted && !PriorityOn )
+    {
+      LastPriorityDisplayTime = millis ( );
+      PriorityOn = true;
+      theSign.WritePriorityTextFile ( pA->Message, BB_COL_ORANGE, BB_DP_TOPLINE, BB_DM_FLASH );
+      pA->alerted = true;
+    }
+    if ( !pA->displayed )
+    {
+      theSign.WriteStringFile ( pA->signFile+0x20, pA->Message );
+    }
+    tempRunSeq[runSeqIndex++]=pR->signFile;
   }
   tempRunSeq[runSeqIndex]='\0';
   if ( 0 != strcmp ( tempRunSeq, lastRunSeq ) )
@@ -345,11 +309,14 @@ void MaybeUpdateDisplay ( )
 
 void MaybeCheckForNewData ( )
 {
-   if ( millis()-LastCheckTime > MilliSecondsBetweenChecks )
+   if ( millis ( ) - LastCheckTime > MilliSecondsBetweenChecks )
    {
       MBTACheckTime ( );
+      MaybeCancelAlert ( );
       MBTACheckAlerts ( );
+      MaybeCancelAlert ( );
       NextBusCheckPredictions ( );
+      MaybeCancelAlert ( );
       LastCheckTime = millis ( );
    }
 }
@@ -357,11 +324,11 @@ void MaybeCheckForNewData ( )
 void GetXML ( char *ServerName, char *Page, XMLcallback fcb )
 {
   bool failed=false;
-  ToggleLED ( );
+  ImStillAlive ( );
   xml.init ( (uint8_t*)&boofer, buflen, fcb );
   if ( wifi.connect ( ServerName, 80 ) == 1 )
   {
-    WDT_Restart( WDT );
+    ImStillAlive( );
     unsigned long tim;
     wifi.print ( "GET " );
     wifi.print ( Page );
@@ -372,21 +339,21 @@ void GetXML ( char *ServerName, char *Page, XMLcallback fcb )
     tim  = millis ( );
     while ( true )
     {
-      if (wifi.available())
+      if ( wifi.available ( ) )
       {
         tim = millis ( );
-        char c = wifi.read();
+        char c = wifi.read ( );
 	// "<" should be the first char of the body
 	// we simply drop any characters before that
-	if ( c=='<' )
+	if ( c == '<' )
 	{
-	  xml.processChar('<');
+	  xml.processChar ( '<' );
           break;
         }
       }
       else if ( millis ( ) - tim > 5000 )
       {
-        WDT_Restart( WDT );
+        ImStillAlive ( );
         DebugOutLn ( "Timed out :-(" );
         if ( ++WiFiTimeouts > MaxWiFiTimeouts ) ResetWiFi ( );
         failed = true;
@@ -397,15 +364,15 @@ void GetXML ( char *ServerName, char *Page, XMLcallback fcb )
     tim  = millis ( );
     while ( !failed )
     {
-      if ( wifi.available())
+      if ( wifi.available ( ) )
       {
-        char c = wifi.read();
-        xml.processChar(c);
+        char c = wifi.read ( );
+        xml.processChar ( c );
         tim = millis ( );
       }
-      if ( !wifi.connected ( ) || millis()-tim>1000 )
+      if ( !wifi.connected ( ) || millis ( ) - tim > 1000 )
       {
-        failed=true;
+        failed = true;
         wifi.stop ( );
       }
     }
@@ -431,55 +398,17 @@ void NextBusCheckPredictions ( )
   GetXML ( NextBusServer, NextBusPredictionURL, PredictionsXMLCB );
 }
 
-void XML_GenericCallback ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  char* data,  uint16_t dataLen )
-{
-  if (statusflags & STATUS_START_TAG)
-  {
-    if ( tagNameLen )
-    {
-      DebugOut("Start tag ");
-      DebugOutLn(tagName);
-    }
-  }
-  else if  (statusflags & STATUS_END_TAG)
-  {
-    DebugOut("End tag ");
-    DebugOutLn(tagName);
-  }
-  else if  (statusflags & STATUS_TAG_TEXT)
-  {
-    DebugOut("Tag:");
-    DebugOut(tagName);
-    DebugOut(" text:");
-    DebugOutLn(data);
-  }
-  else if  (statusflags & STATUS_ATTR_TEXT)
-  {
-    DebugOut("Attribute:");
-    DebugOut(tagName);
-    DebugOut(" text:");
-    DebugOutLn(data);
-  }
-  else if  (statusflags & STATUS_ERROR)
-  {
-    DebugOut("XML Parsing error  Tag:");
-    DebugOut(tagName);
-    DebugOut(" text:");
-    DebugOutLn(data);
-  }
-}
-
 void ServerTimeXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  char* data,  uint16_t dataLen )
 {
   static char *pTag;
-  if (statusflags & STATUS_START_TAG)
+  if ( statusflags & STATUS_START_TAG )
   {
     if ( tagNameLen )
     {
       pTag = tagName;
     }
   }
-  else if  (statusflags & STATUS_ATTR_TEXT)
+  else if ( statusflags & STATUS_ATTR_TEXT )
   {
     if ( tagNameLen && dataLen )
     {
@@ -498,14 +427,14 @@ void RouteListXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen, 
   static bool BusMode=false;
   static RoutePred  *pCR;
   
-  if (statusflags & STATUS_START_TAG)
+  if ( statusflags & STATUS_START_TAG )
   {
     if ( tagNameLen )
     {
       pTag = tagName;
     }
   }
-  else if  (statusflags & STATUS_ATTR_TEXT)
+  else if ( statusflags & STATUS_ATTR_TEXT )
   {
     if ( tagNameLen && dataLen )
     {
@@ -531,7 +460,7 @@ void RouteListXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen, 
       }
     }
   }
-  else if (statusflags & STATUS_END_TAG)
+  else if ( statusflags & STATUS_END_TAG )
   {
     if ( strcmp ( tagName, "/route_list" ) == 0 && numRoutes > 0 ) DebugOutLn ( "" );
   }
@@ -544,14 +473,14 @@ void AlertsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  ch
   static unsigned long aid;
   static AlertMsg *pCurrentAlert;
   
-  if (statusflags & STATUS_START_TAG)
+  if ( statusflags & STATUS_START_TAG )
   {
     if ( tagNameLen )
     {
       pTag = tagName;
     }
   }
-  else if (statusflags & STATUS_END_TAG)
+  else if ( statusflags & STATUS_END_TAG )
   {
     if ( strcmp ( tagName, "/alerts/alert" ) == 0 )
     {
@@ -562,7 +491,7 @@ void AlertsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  ch
       }
     }
   }
-  else if  (statusflags & STATUS_TAG_TEXT)
+  else if ( statusflags & STATUS_TAG_TEXT )
   {
     if ( strcmp ( tagName, "/alerts/alert/header_text" ) == 0 && pCurrentAlert )
     {
@@ -573,7 +502,7 @@ void AlertsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  ch
       }
     }
   }
-  else if  (statusflags & STATUS_ATTR_TEXT)
+  else if ( statusflags & STATUS_ATTR_TEXT )
   {
     if ( tagNameLen )
     {
@@ -639,7 +568,7 @@ void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen
   static bool Approximate, NewInfo;
   static RoutePred  *pCR;
   
-  if (statusflags & STATUS_START_TAG)
+  if ( statusflags & STATUS_START_TAG )
   {
     if ( tagNameLen )
     {
@@ -655,7 +584,7 @@ void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen
       }
     }
   }
-  else if  (statusflags & STATUS_ATTR_TEXT)
+  else if ( statusflags & STATUS_ATTR_TEXT )
   {
     if ( tagNameLen && dataLen )
     {
@@ -678,17 +607,17 @@ void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen
           }
         }
       }
-      else if ( strcmp ( tagName, "minutes" ) == 0 && strcmp ( pTag, "/body/predictions/direction/prediction") == 0 )
+      else if ( strcmp ( tagName, "minutes" ) == 0 && strcmp ( pTag, "/body/predictions/direction/prediction" ) == 0 )
       {
         Minutes = atol ( data );
       }
-      else if ( strcmp ( tagName, "affectedByLayover" ) == 0 && strcmp ( pTag, "/body/predictions/direction/prediction") == 0 )
+      else if ( strcmp ( tagName, "affectedByLayover" ) == 0 && strcmp ( pTag, "/body/predictions/direction/prediction" ) == 0 )
       {
         Approximate = true;
       }
     }
   }
-  else if (statusflags & STATUS_END_TAG)
+  else if ( statusflags & STATUS_END_TAG )
   {
     if ( strcmp ( tagName, "/body/predictions/direction/prediction" ) == 0 )
     {
@@ -738,14 +667,15 @@ void ResetWiFi ( void )
   wifi.begin ( 9600 );
   for ( i=0; i<100; i++ )
   {
-    ToggleLED ( );
+    ImStillAlive ( );
     delay ( 20 );
   }
 }
 
-void ToggleLED ( )
+void ImStillAlive ( )
 {
   static bool ledon=false;
+  WDT_Restart ( WDT );
   if ( ledon )
   {
     ledon = false;
@@ -758,3 +688,11 @@ void ToggleLED ( )
   }
 }
 
+void MaybeCancelAlert ( )
+{
+  if ( PriorityOn && ( millis ( ) - LastPriorityDisplayTime > PriorityTime ) )
+  {
+    PriorityOn = false;
+    theSign.CancelPriorityTextFile ( );
+  }
+}
