@@ -58,3 +58,10 @@ DX-17 ARX MBOB-9 R1-OUT
 In addition to the usual power and ground.
 
 Transmit from Arduino (DigiX) goes from pin 16 (TX1 on silkscreen) to T1-IN on the MBOB, thru the MBOB and out T1-OUT which then gets connected to RJ11-3 BetaBrite Receive. Transmit from BetaBrite goes from RJ11-4 to the R1-IN on the MBOB, thru the MBOB and out R1-OUT which then gets connected to the Arduino (DigiX) pin 17 (RX1).
+
+Enhancements
+============
+
+Put a timestamp on predictions and time, and age them
+Record when a particular prediction has been alerted with NOW! (maybe track vehicle or trip tag?)
+Allow for multiple stops?? (the Megan enhancement!)
