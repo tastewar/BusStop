@@ -147,7 +147,7 @@ void setup ( )
 
 void loop ( )
 {
-  ImStillAlive( );
+  ImStillAlive ( );
   DHCPandStatusCheck ( );
   MaybeCheckForNewData ( );
   MaybeUpdateDisplay ( );
@@ -156,6 +156,7 @@ void loop ( )
 
 void MBTACountRoutesByStop ( )
 {
+  ImStillAlive ( );
   DebugOutLn ( "Getting list of routes for the stop." );
   while ( !GetXML ( MBTAServer, MBTARoutesByStopURL, RouteListXMLCB ) )
   {
@@ -170,6 +171,7 @@ void ConfigureDisplay ( )
   AlertMsg    *pAlert;
   char AlertFileText[5]="\0203\020a"; // call file 3, call file 'a'
   
+  ImStillAlive ( );
   theSign.CancelPriorityTextFile ( );
   // CLEAR MEMORY
   theSign.StartMemoryConfigurationCommand ( );
@@ -236,6 +238,7 @@ void MaybeUpdateDisplay ( )
   unsigned long tempMin;
   char  runSeqIndex=0, strbuf[256], tempRunSeq[RunSeqMax];
 
+  ImStillAlive ( );
   MaybeCancelAlert ( );
   MaybeDisplayTime ( strbuf );
 
@@ -429,6 +432,7 @@ boolean GetXML ( char *ServerName, char *Page, XMLcallback fcb )
   }
   if ( XMLDone ) DebugOutLn ( "Successful GetXML!" );
   else if ( ++WiFiProblems > MaxWiFiProblems ) ResetWiFi ( );
+  ImStillAlive ( );
   return XMLDone;
 }
 
