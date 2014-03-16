@@ -64,6 +64,12 @@ Enhancements
 
 Allow for multiple stops?? (the Megan enhancement!)
 Cancel Alerts when they stop showing up, even if not expired!
-Can get a BIG number for predicted time. Shouldn't be possible. -- maybe fixed
 On startup, sometimes hit watchdog reboot loop?
 Maybe change date time scroll to Date, then Time, then rest of sequence
+Keep track of stats and allow for a button to be pressed to display them.
+Track power-ups, resets, etc. in NV storage??
+Switch to faster baud rate and flow control on.
+
+Enclosure
+=========
+The enclosure only needs to be big enough for the DigiX and a small Perma-Proto board. Ideally, one end of the case will have the RJ jack for the serial cable, a power input, and a short power output cable coming out. Internally, the power should split, with one half going back out for the BB, and the other going into the DigiX. Needs a short 6-conductor RJ cord as well. Perhaps a couple of LEDs to indicate wifi reset or other interesting states. Two buttons: one for reset, the other for displaying statistics.

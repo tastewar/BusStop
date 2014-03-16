@@ -1,11 +1,12 @@
 #include <BB2DEFS.h>
 #include <BETABRITE2.h>
+#include <DBInput.h>
 
 // Author: Tom Stewart
 // Date: March 2014
-// Version: 0.71
+// Version: 0.72
 
-#define Version "0.71"
+#define Version "0.72"
 
 #include <Wire.h>
 #include <stdint.h>
@@ -40,6 +41,7 @@
 #define buflen 150
 #define WiFiResetPin 106
 #define LEDPin 13
+#define ButtonPin 2
 #define MaxWiFiProblems 3
 #define TimeLabelFile '1'
 #define TimeStringFile '2'
@@ -62,7 +64,21 @@ char signFile='A', firstAlertFile, WiFiProblems, lastRunSeq[RunSeqMax];
 bool PriorityOn;
 bool XMLDone;
 TinyXML xml;
+DBInput StatsButton ( ButtonPin, 250 );
 uint8_t boofer[buflen];
+
+typedef struct _Stats
+{
+  unsigned long  connatt;
+  unsigned long  connsucc; // succ + fail should equal att
+  unsigned long  connfail;
+  unsigned long  connto1; // to1 + to2 + clz should equal succ
+  unsigned long  connto2;
+  unsigned long  connclz;
+  unsigned long  connincom;
+  unsigned long  resets;
+  unsigned long  boottime; // epoch time of first successful time retrieval
+} Stats;
 
 typedef struct _Pred
 {
@@ -101,6 +117,7 @@ LinkedList<RoutePred*> RouteList = LinkedList<RoutePred*>();
 
 DigiFi  wifi;
 BETABRITE theSign ( Serial2 );
+Stats  stats;
 
 void setup ( )
 {
@@ -138,7 +155,7 @@ void setup ( )
     delay ( 10 );
   } while ( wifi.ready ( ) != 1 );
   
-  theSign.WritePriorityTextFile ( "Connected to wifi!" );
+  DebugOutLn ( "Connected to wifi!" );
   MBTACountRoutesByStop ( );
   ConfigureDisplay ( );
   LastCheckTime = millis ( ) - MilliSecondsBetweenChecks;
@@ -148,6 +165,8 @@ void setup ( )
 void loop ( )
 {
   ImStillAlive ( );
+  StatsButton.Poll ( );
+  if ( StatsButton.GetDBState ( ) == DBISJustLow ) ShowStatistics ( );
   DHCPandStatusCheck ( );
   MaybeCheckForNewData ( );
   MaybeUpdateDisplay ( );
@@ -366,9 +385,11 @@ boolean GetXML ( char *ServerName, char *Page, XMLcallback fcb )
   XMLDone = false;
   ImStillAlive ( );
   xml.init ( (uint8_t*)&boofer, buflen, fcb );
+  stats.connatt++;
   if ( wifi.connect ( ServerName, 80 ) == 1 )
   {
     ImStillAlive ( );
+    stats.connsucc++;
     unsigned long tim;
     wifi.print ( "GET " );
     wifi.print ( Page );
@@ -396,7 +417,7 @@ boolean GetXML ( char *ServerName, char *Page, XMLcallback fcb )
         ImStillAlive ( );
         DebugOutLn ( "Timed out 1." );
         wifi.stop ( );
-        if ( ++WiFiProblems > MaxWiFiProblems ) ResetWiFi ( );
+        stats.connto1++;
         failed = true;
         break;
       }
@@ -414,12 +435,14 @@ boolean GetXML ( char *ServerName, char *Page, XMLcallback fcb )
       else if ( !wifi.connected ( ) )
       {
         DebugOutLn ( "No longer connected." );
+        stats.connclz++;
         failed = true;
         wifi.stop ( );
       }
       else if ( millis ( ) - tim > 1000 )
       {
         DebugOutLn ( "Timed out 2" );
+        stats.connto2++;
         failed = true;
         wifi.stop ( );
       }
@@ -427,11 +450,12 @@ boolean GetXML ( char *ServerName, char *Page, XMLcallback fcb )
   }
   else
   {
+    stats.connfail++;
     failed = true;
     DebugOutLn ( "Failed to connect :-(" );
   }
   if ( XMLDone ) DebugOutLn ( "Successful GetXML!" );
-  else if ( ++WiFiProblems > MaxWiFiProblems ) ResetWiFi ( );
+  else if ( ++stats.connincom % MaxWiFiProblems == 0 ) ResetWiFi ( );
   ImStillAlive ( );
   return XMLDone;
 }
@@ -475,6 +499,7 @@ void ServerTimeXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,
       if ( strcmp ( tagName, "server_dt" ) == 0 && strcmp ( pTag, "/server_time" == 0 ) )
       {
         MBTAEpochTime = atol ( data );
+        if ( !stats.boottime ) stats.boottime = MBTAEpochTime;
         TimeTimeStamp = millis ( );
       }
     }
@@ -787,23 +812,27 @@ void ResetWiFi ( void )
 {
   int i;
   // requires SJ4 to be soldered closed (non-default) and SJ3 to be cut open (default)
+  ImStillAlive ( );
   DebugOutLn ( "* * * * Resetting WiFi module! * * * *" );
   WiFiProblems = 0;
   digitalWrite ( WiFiResetPin, LOW );
   delay ( 15 );
   digitalWrite ( WiFiResetPin, HIGH );
+  ImStillAlive ( );
   delay ( 2000 );
+  ImStillAlive ( );
 #if defined DEBUG
-  wifi.begin ( 9600, false );
+  wifi.begin ( 57600, true ); // requires that the wifi interface be configured likewise!!
 //  wifi.setDebug ( true );
 #else
-  wifi.begin ( 9600 );
+  wifi.begin ( 57600, true );
 #endif
   for ( i=0; i<50; i++ )
   {
-    ImStillAlive ( );
     delay ( i );
+    ImStillAlive ( ); // just to blink the LED, really
   }
+  stats.resets++;
 }
 
 void ImStillAlive ( )
@@ -823,4 +852,24 @@ void MaybeCancelAlert ( )
     PriorityOn = false;
     theSign.CancelPriorityTextFile ( );
   }
+}
+
+void ShowStatistics ( )
+{
+  char uptime[16], buff[1024];
+  unsigned long secondsup, days, hours, minutes;
+  
+  secondsup = MBTAEpochTime - stats.boottime;
+  secondsup += ( ( millis ( ) - TimeTimeStamp ) / 1000 );
+  
+  days = secondsup / 86400;
+  hours = ( secondsup % 86400 ) / 3600;
+  minutes = ( secondsup % 3600 ) / 60;
+  
+  sprintf ( uptime, "%uD %uH %uM", days, hours, minutes );
+  sprintf ( buff, "Uptime: %s; Conns: %u; Succ %u; Fail: %u; TO1: %u; TO2: %u; Closed: %u; Incomplete: %u; Resets: %u.",
+            uptime, stats.connatt, stats.connsucc, stats.connfail, stats.connto1, stats.connto2, stats.connclz, stats.connincom, stats.resets );
+  theSign.WritePriorityTextFile ( buff, BB_COL_GREEN );
+  LastPriorityDisplayTime = millis ( );
+  PriorityOn = true;
 }
