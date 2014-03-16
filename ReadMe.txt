@@ -62,6 +62,8 @@ Transmit from Arduino (DigiX) goes from pin 16 (TX1 on silkscreen) to T1-IN on t
 Enhancements
 ============
 
-Put a timestamp on predictions and time, and age them
-Record when a particular prediction has been alerted with NOW! (maybe track vehicle or trip tag?)
 Allow for multiple stops?? (the Megan enhancement!)
+Cancel Alerts when they stop showing up, even if not expired!
+Can get a BIG number for predicted time. Shouldn't be possible. -- maybe fixed
+On startup, sometimes hit watchdog reboot loop?
+Maybe change date time scroll to Date, then Time, then rest of sequence

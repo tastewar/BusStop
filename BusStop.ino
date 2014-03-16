@@ -3,9 +3,9 @@
 
 // Author: Tom Stewart
 // Date: March 2014
-// Version: 1.5
+// Version: 0.71
 
-#define Version "1.5"
+#define Version "0.71"
 
 #include <Wire.h>
 #include <stdint.h>
@@ -36,7 +36,7 @@
 #define MaxPriorityMessageLength BB_MAX_STRING_FILE_SIZE
 #define MaxAlertMessageLength 230
 #define MilliSecondsBetweenChecks 10000
-#define PriorityTime 20000
+#define PriorityTime 10000
 #define buflen 150
 #define WiFiResetPin 106
 #define LEDPin 13
@@ -60,13 +60,18 @@ unsigned long LastCheckTime, MBTAEpochTime, TimeTimeStamp, LastPriorityDisplayTi
 unsigned char numRoutes=0;
 char signFile='A', firstAlertFile, WiFiProblems, lastRunSeq[RunSeqMax];
 bool PriorityOn;
+bool XMLDone;
 TinyXML xml;
 uint8_t boofer[buflen];
 
 typedef struct _Pred
 {
-  boolean  layover;
-  long     mins;
+  boolean        layover;
+  boolean        alerted;
+  int            vehicle;
+  long           seconds; // signed so we can use -1 as a special value
+  unsigned long  lastdisplayedmins;
+  unsigned long  timestamp;
 } Pred;
 
 typedef struct _RoutePred
@@ -99,26 +104,27 @@ BETABRITE theSign ( Serial2 );
 
 void setup ( )
 {
-  WDT_Disable(WDT);
 #if defined DEBUG
+  WDT_Disable(WDT);
   Serial.begin ( 9600 );
   while ( !Serial.available ( ) )
   {
     DebugOutLn ( "Enter any key to begin" );
     delay ( 1000 );
   }
+#else
+  unsigned long wdp_ms = 2048; // 8 seconds
+  WDT_Enable( WDT, 0x2000 | wdp_ms | ( wdp_ms << 16 ));
 #endif
-  Serial2.begin ( 9600 );
-  unsigned long wdp_ms = 5120; // 20 seconds
-  unsigned long    wst;
+  unsigned long wst;
   pinMode ( WiFiResetPin, OUTPUT );
   pinMode ( LEDPin, OUTPUT );
   digitalWrite ( WiFiResetPin, HIGH );
   digitalWrite ( LEDPin, LOW );
+  Serial2.begin ( 9600 );
   ResetWiFi ( );
   DebugOutLn ( "Starting setup..." );
   theSign.WritePriorityTextFile ( "BusStopSign v" Version " starting up..." );
-  WDT_Enable( WDT, 0x2000 | wdp_ms | ( wdp_ms << 16 ));
   wst = millis ( );
   do
   {
@@ -151,7 +157,10 @@ void loop ( )
 void MBTACountRoutesByStop ( )
 {
   DebugOutLn ( "Getting list of routes for the stop." );
-  GetXML ( MBTAServer, MBTARoutesByStopURL, RouteListXMLCB );
+  while ( !GetXML ( MBTAServer, MBTARoutesByStopURL, RouteListXMLCB ) )
+  {
+    DebugOutLn ( "Retrying route list." );
+  }
 }
 
 void ConfigureDisplay ( )
@@ -224,18 +233,13 @@ void MaybeUpdateDisplay ( )
   // in this function, need to check for alerts that have expired and move them from active to free
   // as well as remove them from the BB rotation
   //
-  static unsigned long LastMinuteDisplayed;
   unsigned long tempMin;
   char  runSeqIndex=0, strbuf[256], tempRunSeq[RunSeqMax];
 
   MaybeCancelAlert ( );
-  tempMin = MBTAEpochTime / 60;
-  if ( tempMin != LastMinuteDisplayed )
-  {
-    LastMinuteDisplayed = tempMin;
-    DisplayTime ( strbuf );
-  }
-  tempRunSeq[runSeqIndex++] = TimeLabelFile;
+  MaybeDisplayTime ( strbuf );
+
+  if ( MBTAEpochTime ) tempRunSeq[runSeqIndex++] = TimeLabelFile;
 
   int i, s;
   RoutePred   *pRoute;
@@ -253,11 +257,23 @@ void MaybeUpdateDisplay ( )
       for ( j=0; j<pRoute->activePreds; j++ )
       {
         char  numbuff[6];
+        long  mins;
         
         pPred=&pRoute->pred[j];
         if ( pPred->layover ) strcat ( strbuf, "*" );
-        sprintf ( numbuff, "%d", pPred->mins );
-        strcat ( strbuf, numbuff );
+        unsigned long elapsedMS = millis ( ) - pPred->timestamp;
+        mins = ( pPred->seconds - ( elapsedMS / 1000 ) ) / 60;
+        if ( mins < 0 || mins > 120 ) mins = 0;
+        pPred->lastdisplayedmins = mins;
+        if ( mins < 2 || ( j == 0 && pPred->alerted ) )
+        {
+          strcat ( strbuf, "Now" );
+        }
+        else
+        {
+          sprintf ( numbuff, "%d", mins );
+          strcat ( strbuf, numbuff );
+        }
         if ( j < pRoute->activePreds - 1 ) strcat ( strbuf, ", " );
       }
       theSign.WriteStringFile ( pRoute->signFile+0x20, strbuf );
@@ -269,10 +285,11 @@ void MaybeUpdateDisplay ( )
     if ( pRoute->activePreds != 0 )
     {
       tempRunSeq[runSeqIndex++]=pRoute->signFile;
-      if ( pRoute->pred[0].mins == 0 && !PriorityOn )
+      if ( pRoute->pred[0].lastdisplayedmins < 2 && !pRoute->pred[0].alerted && !PriorityOn )
       {
         LastPriorityDisplayTime = millis ( );
         PriorityOn = true;
+        pRoute->pred[0].alerted = true;
         sprintf ( strbuf, "<<<%s: NOW!>>>", pRoute->routename );
         theSign.WritePriorityTextFile ( strbuf, BB_COL_ORANGE, BB_DP_TOPLINE, BB_DM_FLASH );
       }
@@ -318,25 +335,32 @@ void MaybeCheckForNewData ( )
   static unsigned char which;
   if ( millis ( ) - LastCheckTime > MilliSecondsBetweenChecks )
   {
-    which++;
-    which %= 2;
-    MBTACheckTime ( );
     switch ( which )
     {
       case 0:
-        NextBusCheckPredictions ( );
+        MBTACheckTime ( );
         break;
       case 1:
+      case 3:
+      case 4:
+      case 5:
+      case 7:
+        NextBusCheckPredictions ( );
+        break;
+      case 2:
+      case 6:
         MBTACheckAlerts ( );
         break;
     }
     LastCheckTime = millis ( );
+    ++which %= 8;
   }
 }
 
-void GetXML ( char *ServerName, char *Page, XMLcallback fcb )
+boolean GetXML ( char *ServerName, char *Page, XMLcallback fcb )
 {
   bool failed=false;
+  XMLDone = false;
   ImStillAlive ( );
   xml.init ( (uint8_t*)&boofer, buflen, fcb );
   if ( wifi.connect ( ServerName, 80 ) == 1 )
@@ -364,10 +388,11 @@ void GetXML ( char *ServerName, char *Page, XMLcallback fcb )
           break;
         }
       }
-      else if ( millis ( ) - tim > 5000 )
+      else if ( millis ( ) - tim > 2000 )
       {
         ImStillAlive ( );
-        DebugOutLn ( "Timed out :-(" );
+        DebugOutLn ( "Timed out 1." );
+        wifi.stop ( );
         if ( ++WiFiProblems > MaxWiFiProblems ) ResetWiFi ( );
         failed = true;
         break;
@@ -383,19 +408,28 @@ void GetXML ( char *ServerName, char *Page, XMLcallback fcb )
         xml.processChar ( c );
         tim = millis ( );
       }
-      if ( !wifi.connected ( ) || millis ( ) - tim > 1000 )
+      else if ( !wifi.connected ( ) )
       {
+        DebugOutLn ( "No longer connected." );
         failed = true;
         wifi.stop ( );
-        if ( ++WiFiProblems > MaxWiFiProblems ) ResetWiFi ( );
+      }
+      else if ( millis ( ) - tim > 1000 )
+      {
+        DebugOutLn ( "Timed out 2" );
+        failed = true;
+        wifi.stop ( );
       }
     }
   }
   else
   {
+    failed = true;
     DebugOutLn ( "Failed to connect :-(" );
-    if ( ++WiFiProblems > MaxWiFiProblems ) ResetWiFi ( );
   }
+  if ( XMLDone ) DebugOutLn ( "Successful GetXML!" );
+  else if ( ++WiFiProblems > MaxWiFiProblems ) ResetWiFi ( );
+  return XMLDone;
 }
 
 void MBTACheckTime ( )
@@ -419,6 +453,10 @@ void NextBusCheckPredictions ( )
 void ServerTimeXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  char* data,  uint16_t dataLen )
 {
   static char *pTag;
+
+  MaybeCancelAlert ( );
+  ImStillAlive ( );  
+
   if ( statusflags & STATUS_START_TAG )
   {
     if ( tagNameLen )
@@ -437,6 +475,13 @@ void ServerTimeXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,
       }
     }
   }
+  else if ( statusflags & STATUS_END_TAG )
+  {
+    if ( strcmp ( tagName, "/server_time" ) == 0 )
+    {
+      XMLDone = true;
+    }
+  }
 }
 
 void RouteListXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  char* data,  uint16_t dataLen )
@@ -445,6 +490,9 @@ void RouteListXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen, 
   static bool BusMode=false;
   static RoutePred  *pCR;
   
+  MaybeCancelAlert ( );
+  ImStillAlive ( );  
+
   if ( statusflags & STATUS_START_TAG )
   {
     if ( tagNameLen )
@@ -480,7 +528,11 @@ void RouteListXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen, 
   }
   else if ( statusflags & STATUS_END_TAG )
   {
-    if ( strcmp ( tagName, "/route_list" ) == 0 && numRoutes > 0 ) DebugOutLn ( "" );
+    if ( strcmp ( tagName, "/route_list" ) == 0 && numRoutes > 0 )
+    {
+      DebugOutLn ( "" );
+      XMLDone = true;
+    }
   }
 }
 
@@ -491,22 +543,14 @@ void AlertsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  ch
   static unsigned long aid;
   static AlertMsg *pCurrentAlert;
   
+  MaybeCancelAlert ( );
+  ImStillAlive ( );  
+
   if ( statusflags & STATUS_START_TAG )
   {
     if ( tagNameLen )
     {
       pTag = tagName;
-    }
-  }
-  else if ( statusflags & STATUS_END_TAG )
-  {
-    if ( strcmp ( tagName, "/alerts/alert" ) == 0 )
-    {
-      if ( NewInfo && pCurrentAlert )
-      {
-        pCurrentAlert->displayed = false;
-        pCurrentAlert->alerted = false;
-      }
     }
   }
   else if ( statusflags & STATUS_TAG_TEXT )
@@ -577,15 +621,33 @@ void AlertsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  ch
       }
     }
   }
+  else if ( statusflags & STATUS_END_TAG )
+  {
+    if ( strcmp ( tagName, "/alerts/alert" ) == 0 )
+    {
+      if ( NewInfo && pCurrentAlert )
+      {
+        pCurrentAlert->displayed = false;
+        pCurrentAlert->alerted = false;
+      }
+    }
+    else if ( strcmp ( tagName, "/alerts" ) == 0 )
+    {
+      XMLDone = true;
+    }
+  }
 }
 
 void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  char* data,  uint16_t dataLen )
 {
   static char *pTag;
-  static int Minutes, prdno;
+  static int Seconds, prdno, Vehicle;
   static bool Approximate, NewInfo;
   static RoutePred  *pCR;
-  
+
+  MaybeCancelAlert ( );
+  ImStillAlive ( );  
+
   if ( statusflags & STATUS_START_TAG )
   {
     if ( tagNameLen )
@@ -593,8 +655,9 @@ void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen
       pTag = tagName;
       if ( strcmp ( tagName, "/body/predictions/direction/prediction" ) == 0 )
       {
-        Minutes = -1;
+        Seconds = -1;
         Approximate = false;
+        Vehicle = 0;
       }
       else if ( strcmp ( tagName, "/body/predictions" ) == 0 )
       {
@@ -625,13 +688,17 @@ void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen
           }
         }
       }
-      else if ( strcmp ( tagName, "minutes" ) == 0 && strcmp ( pTag, "/body/predictions/direction/prediction" ) == 0 )
+      else if ( strcmp ( tagName, "seconds" ) == 0 && strcmp ( pTag, "/body/predictions/direction/prediction" ) == 0 )
       {
-        Minutes = atol ( data );
+        Seconds = atol ( data );
       }
       else if ( strcmp ( tagName, "affectedByLayover" ) == 0 && strcmp ( pTag, "/body/predictions/direction/prediction" ) == 0 )
       {
         Approximate = true;
+      }
+      else if ( strcmp ( tagName, "vehicle" ) == 0 && strcmp ( pTag, "/body/predictions/direction/prediction" ) == 0 )
+      {
+        Vehicle = atol ( data );
       }
     }
   }
@@ -639,18 +706,26 @@ void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen
   {
     if ( strcmp ( tagName, "/body/predictions/direction/prediction" ) == 0 )
     {
-      if ( Minutes != -1 )
+      if ( Seconds != -1 )
       {
         if ( pCR->pred[prdno].layover != Approximate )
         {
           pCR->pred[prdno].layover = Approximate;
           NewInfo = true;
         }
-        if ( pCR->pred[prdno].mins != Minutes )
+        if ( pCR->pred[prdno].seconds != Seconds )
         {
-          pCR->pred[prdno].mins = Minutes;
+          pCR->pred[prdno].seconds = Seconds;
+          pCR->pred[prdno].timestamp = millis ( );
           NewInfo = true;
         }
+        if ( pCR->pred[prdno].vehicle != Vehicle )
+        {
+          pCR->pred[prdno].vehicle = Vehicle;
+          NewInfo = true;
+          pCR->pred[prdno].alerted = false;
+        }
+        if ( NewInfo ) 
         prdno++;
       }
     }
@@ -661,26 +736,47 @@ void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen
         pCR->activePreds = prdno;
         NewInfo = true;
       }
-      if ( prdno != 0 && NewInfo ) pCR->displayed = false;
+      if ( prdno != 0 && NewInfo )
+      {
+        pCR->displayed = false;
+      }
+    }
+    else if ( strcmp ( tagName, "/body" ) == 0 )
+    {
+      XMLDone = true;
     }
   }
 }
 
-void DisplayTime ( char *buf )
+unsigned long CurrentEpochTime ( void )
 {
-  DateTime dt ( MBTAEpochTime + TIME_ZONE_OFFSET );
+  unsigned long elapsedMS = millis ( ) - TimeTimeStamp;
+  unsigned long elapsedS = elapsedMS / 1000;
+  return MBTAEpochTime + elapsedS;
+}
+
+void MaybeDisplayTime ( char *buf )
+{
+  static uint8_t LastDisplayedMins=99;
   bool pm;
-  uint8_t hr=dt.hour();
-  if ( hr >= 12 )
+
+  DateTime dt ( CurrentEpochTime ( ) + TIME_ZONE_OFFSET );
+  if ( dt.minute ( ) != LastDisplayedMins )
   {
-    pm=true;
-    hr-=12;
+    uint8_t DisplayHour = dt.hour ( );
+    if ( DisplayHour >= 12 )
+    {
+      pm = true;
+      DisplayHour -= 12;
+    }
+    else pm = false;
+    if ( DisplayHour == 0 ) DisplayHour = 12;
+    
+    sprintf ( buf, "%d/%d/%d %02d:%02d %s", dt.year(), dt.month(), dt.day(), DisplayHour, dt.minute(), pm ? "PM" : "AM" );
+    theSign.WriteStringFile ( TimeStringFile, buf );
+    DebugOutLn ( buf );
+    LastDisplayedMins = dt.minute ( );
   }
-  else pm=false;
-  if ( hr == 0 ) hr = 12;
-  sprintf ( buf, "%d/%d/%d %02d:%02d %s", dt.year(), dt.month(), dt.day(), hr, dt.minute(), pm ? "PM" : "AM" );
-  theSign.WriteStringFile ( TimeStringFile, buf );
-  DebugOutLn ( buf );
 }
 
 void ResetWiFi ( void )
@@ -688,13 +784,14 @@ void ResetWiFi ( void )
   int i;
   // requires SJ4 to be soldered closed (non-default) and SJ3 to be cut open (default)
   DebugOutLn ( "* * * * Resetting WiFi module! * * * *" );
+  WiFiProblems = 0;
   digitalWrite ( WiFiResetPin, LOW );
   delay ( 15 );
   digitalWrite ( WiFiResetPin, HIGH );
-  delay ( 1000 );
+  delay ( 2000 );
 #if defined DEBUG
   wifi.begin ( 9600, false );
-  wifi.setDebug ( true );
+//  wifi.setDebug ( true );
 #else
   wifi.begin ( 9600 );
 #endif
