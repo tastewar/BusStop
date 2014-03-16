@@ -66,9 +66,7 @@ Allow for multiple stops?? (the Megan enhancement!)
 Cancel Alerts when they stop showing up, even if not expired!
 On startup, sometimes hit watchdog reboot loop?
 Maybe change date time scroll to Date, then Time, then rest of sequence
-Keep track of stats and allow for a button to be pressed to display them.
 Track power-ups, resets, etc. in NV storage??
-Switch to faster baud rate and flow control on.
 
 Enclosure
 =========

@@ -1,12 +1,11 @@
 #include <BB2DEFS.h>
 #include <BETABRITE2.h>
-#include <DBInput.h>
 
 // Author: Tom Stewart
 // Date: March 2014
-// Version: 0.72
+// Version: 0.73
 
-#define Version "0.72"
+#define Version "0.73"
 
 #include <Wire.h>
 #include <stdint.h>
@@ -41,7 +40,7 @@
 #define buflen 150
 #define WiFiResetPin 106
 #define LEDPin 13
-#define ButtonPin 2
+#define StatsButtonPin 2
 #define MaxWiFiProblems 3
 #define TimeLabelFile '1'
 #define TimeStringFile '2'
@@ -58,13 +57,12 @@
 #define DebugOut(a)
 #endif
 
-unsigned long LastCheckTime, MBTAEpochTime, TimeTimeStamp, LastPriorityDisplayTime;
+unsigned long LastCheckTime, MBTAEpochTime, TimeTimeStamp, LastPriorityDisplayTime, LastSuccessfulPredictionTime;
 unsigned char numRoutes=0;
 char signFile='A', firstAlertFile, WiFiProblems, lastRunSeq[RunSeqMax];
-bool PriorityOn;
-bool XMLDone;
+bool PriorityOn, XMLDone;
+volatile bool StatsButtonRequest;
 TinyXML xml;
-DBInput StatsButton ( ButtonPin, 250 );
 uint8_t boofer[buflen];
 
 typedef struct _Stats
@@ -136,6 +134,8 @@ void setup ( )
   unsigned long wst;
   pinMode ( WiFiResetPin, OUTPUT );
   pinMode ( LEDPin, OUTPUT );
+  pinMode ( StatsButtonPin, INPUT_PULLUP );
+  attachInterrupt ( 2, StatsButtonISR, RISING );
   digitalWrite ( WiFiResetPin, HIGH );
   digitalWrite ( LEDPin, LOW );
   Serial2.begin ( 9600 );
@@ -165,8 +165,6 @@ void setup ( )
 void loop ( )
 {
   ImStillAlive ( );
-  StatsButton.Poll ( );
-  if ( StatsButton.GetDBState ( ) == DBISJustLow ) ShowStatistics ( );
   DHCPandStatusCheck ( );
   MaybeCheckForNewData ( );
   MaybeUpdateDisplay ( );
@@ -772,6 +770,7 @@ void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen
     }
     else if ( strcmp ( tagName, "/body" ) == 0 )
     {
+      LastSuccessfulPredictionTime = millis ( );
       XMLDone = true;
     }
   }
@@ -843,6 +842,11 @@ void ImStillAlive ( )
 #endif
   ledon = !ledon;
   digitalWrite ( LEDPin, ledon ? HIGH : LOW );
+  if ( StatsButtonRequest )
+  {
+    StatsButtonRequest = false;
+    ShowStatistics ( );
+  }
 }
 
 void MaybeCancelAlert ( )
@@ -857,7 +861,7 @@ void MaybeCancelAlert ( )
 void ShowStatistics ( )
 {
   char uptime[16], buff[1024];
-  unsigned long secondsup, days, hours, minutes;
+  unsigned long secondsup, days, hours, minutes, predsec;
   
   secondsup = MBTAEpochTime - stats.boottime;
   secondsup += ( ( millis ( ) - TimeTimeStamp ) / 1000 );
@@ -866,10 +870,23 @@ void ShowStatistics ( )
   hours = ( secondsup % 86400 ) / 3600;
   minutes = ( secondsup % 3600 ) / 60;
   
+  predsec = ( millis ( ) - LastSuccessfulPredictionTime ) / 1000;
+  
   sprintf ( uptime, "%uD %uH %uM", days, hours, minutes );
-  sprintf ( buff, "Uptime: %s; Conns: %u; Succ %u; Fail: %u; TO1: %u; TO2: %u; Closed: %u; Incomplete: %u; Resets: %u.",
-            uptime, stats.connatt, stats.connsucc, stats.connfail, stats.connto1, stats.connto2, stats.connclz, stats.connincom, stats.resets );
+  sprintf ( buff, "Uptime: %s; PredictionAge: %uS, Conns: %u; Succ %u; Fail: %u; TO1: %u; TO2: %u; Closed: %u; Incomplete: %u; Resets: %u.",
+            uptime, predsec, stats.connatt, stats.connsucc, stats.connfail, stats.connto1, stats.connto2, stats.connclz, stats.connincom, stats.resets );
   theSign.WritePriorityTextFile ( buff, BB_COL_GREEN );
   LastPriorityDisplayTime = millis ( );
   PriorityOn = true;
+}
+
+void StatsButtonISR ( )
+{
+  static unsigned long last_button_time;
+  unsigned long button_time = millis ( );
+  if ( button_time - last_button_time > 250 )
+  {
+    StatsButtonRequest = true;
+    last_button_time = button_time;
+  }
 }
