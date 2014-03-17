@@ -61,13 +61,27 @@ Transmit from Arduino (DigiX) goes from pin 16 (TX1 on silkscreen) to T1-IN on t
 
 Enhancements
 ============
-
-Allow for multiple stops?? (the Megan enhancement!)
-Cancel Alerts when they stop showing up, even if not expired!
-On startup, sometimes hit watchdog reboot loop?
+**Allow for multiple stops?? (the Megan enhancement!)
+**Re-organize by "direction" and display the direction title as a string file
+  -- explains 350 predictions appearing to be out of order
 Maybe change date time scroll to Date, then Time, then rest of sequence
 Track power-ups, resets, etc. in NV storage??
 
+Bugs
+====
+Cancel Alerts when they stop showing up, even if not expired -- maybe? awaiting any feedback from group
+On startup, sometimes hit watchdog -- why?
+Saw one case where 79 showed a Now that should have been reset -- maybe we failed to note a change in vehicle?
+
 Enclosure
 =========
-The enclosure only needs to be big enough for the DigiX and a small Perma-Proto board. Ideally, one end of the case will have the RJ jack for the serial cable, a power input, and a short power output cable coming out. Internally, the power should split, with one half going back out for the BB, and the other going into the DigiX. Needs a short 6-conductor RJ cord as well. Perhaps a couple of LEDs to indicate wifi reset or other interesting states. Two buttons: one for reset, the other for displaying statistics.
+The enclosure only needs to be big enough for the DigiX and a small Perma-Proto board. Ideally, one end of the case will have the RJ jack for the serial cable, a power input, and a short power output cable coming out. Internally, the power should split, with one half going back out for the BB, and the other going into the DigiX. Needs a short 6-conductor RJ cord as well. Perhaps a couple of LEDs to indicate wifi reset or other interesting states. Two buttons: one for reset, the other for paging through statistics.
+
+Open Questions
+==== =========
+Can we get a static (configuration) list of all route and direction combinations?
+Need to display copyright info?
+
+Notes
+=====
+To move into a more general case, we could have the device query for a configuration page based on the MAC address or other identifier. It could retrieve a list of stops from the config page, and use that. Must display directionTitle for that to be useful. A companion mobile app could get GPS location, query for nearby stops, allow user to select from that list, query for sign id (?), then post a config page. Ideally it could *all* be NextBus API based, as that extends the marketability. If NextBus only, will need to get time elsewhere, & program in stupid DST rules. TimeZone would be part of config page.

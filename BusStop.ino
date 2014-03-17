@@ -3,9 +3,9 @@
 
 // Author: Tom Stewart
 // Date: March 2014
-// Version: 0.74
+// Version: 0.76
 
-#define Version "0.74"
+#define Version "0.76"
 
 #include <Wire.h>
 #include <stdint.h>
@@ -62,7 +62,7 @@ unsigned char numRoutes=0;
 char signFile='A', firstAlertFile, WiFiProblems, lastRunSeq[RunSeqMax], ResetType;
 char ResetTypes[6][12]={"General","Backup","Watchdog","Software","User","Unknown"};
 bool PriorityOn, XMLDone;
-volatile bool StatsButtonRequest;
+volatile unsigned char StatsButtonRequest;
 TinyXML xml;
 uint8_t boofer[buflen];
 
@@ -305,7 +305,7 @@ void MaybeUpdateDisplay ( )
       DebugOutLn ( strbuf );
       pRoute->displayed = true;
     }
-    if ( pRoute->activePreds != 0 )
+    if ( pRoute->activePreds != 0 ) // include in sequence if there are active predictions on the route
     {
       tempRunSeq[runSeqIndex++]=pRoute->signFile;
       if ( pRoute->pred[0].lastdisplayedmins < 2 && !pRoute->pred[0].alerted && !PriorityOn )
@@ -755,7 +755,6 @@ void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen
           NewInfo = true;
           pCR->pred[prdno].alerted = false;
         }
-        if ( NewInfo ) 
         prdno++;
       }
     }
@@ -840,15 +839,16 @@ void ResetWiFi ( void )
 void ImStillAlive ( )
 {
   static bool ledon=false;
+  static unsigned char LastStatsReq;
 #if !defined DEBUG
   WDT_Restart ( WDT );
 #endif
   ledon = !ledon;
   digitalWrite ( LEDPin, ledon ? HIGH : LOW );
-  if ( StatsButtonRequest )
+  if ( StatsButtonRequest != LastStatsReq )
   {
-    StatsButtonRequest = false;
     ShowStatistics ( );
+    LastStatsReq = StatsButtonRequest;
   }
 }
 
@@ -857,30 +857,62 @@ void MaybeCancelAlert ( )
   if ( PriorityOn && ( millis ( ) - LastPriorityDisplayTime > PriorityTime ) )
   {
     PriorityOn = false;
+    StatsButtonRequest = 0;
     theSign.CancelPriorityTextFile ( );
   }
 }
 
 void ShowStatistics ( )
 {
+  // 1-prediction age
+  // 2-uptime
+  // 3-reset type
+  // 4-connections
+  // 5-cancel
   char uptime[16], buff[1024];
   unsigned long secondsup, days, hours, minutes, predsec;
+  switch ( StatsButtonRequest )
+  {
+    case 1:
+      if ( !LastSuccessfulPredictionTime ) strcpy ( buff, "No predictions yet" );
+      else
+      {
+        predsec = ( millis ( ) - LastSuccessfulPredictionTime ) / 1000;
+        sprintf ( buff, "Prediction Age: %u seconds", predsec );
+      }
+      LastPriorityDisplayTime = millis ( ) - PriorityTime + 4000; // priority msg for 4 sec
+      break;
+    case 2:
+      secondsup = MBTAEpochTime - stats.boottime;
+      secondsup += ( ( millis ( ) - TimeTimeStamp ) / 1000 );
   
-  secondsup = MBTAEpochTime - stats.boottime;
-  secondsup += ( ( millis ( ) - TimeTimeStamp ) / 1000 );
-  
-  days = secondsup / 86400;
-  hours = ( secondsup % 86400 ) / 3600;
-  minutes = ( secondsup % 3600 ) / 60;
-  
-  predsec = ( millis ( ) - LastSuccessfulPredictionTime ) / 1000;
-  
-  sprintf ( uptime, "%uD %uH %uM", days, hours, minutes );
-  sprintf ( buff, "PredictionAge: %uS, ResetType: %s, Uptime: %s; Conns: %u; Succ %u; Fail: %u; TO1: %u; TO2: %u; Closed: %u; Incomplete: %u; Resets: %u.",
-            predsec, ResetTypes[ResetType], uptime, stats.connatt, stats.connsucc, stats.connfail, stats.connto1, stats.connto2, stats.connclz, stats.connincom, stats.resets );
-  theSign.WritePriorityTextFile ( buff, BB_COL_GREEN );
-  LastPriorityDisplayTime = millis ( );
-  PriorityOn = true;
+      days = secondsup / 86400;
+      hours = ( secondsup % 86400 ) / 3600;
+      minutes = ( secondsup % 3600 ) / 60;
+      sprintf ( buff, "Uptime: %uD %uH %uM", days, hours, minutes );
+      LastPriorityDisplayTime = millis ( ) - PriorityTime + 4000; // priority msg for 4 sec
+      break;
+    case 3:
+      sprintf ( buff, "Reset Type: %s", ResetTypes[ResetType] );
+      LastPriorityDisplayTime = millis ( ) - PriorityTime + 4000; // priority msg for 4 sec
+      break;
+    case 4:
+      sprintf ( buff, "Conns: %u; Succ %u; Fail: %u; TO1: %u; TO2: %u; Closed: %u; Incomplete: %u; Resets: %u.",
+                stats.connatt, stats.connsucc, stats.connfail, stats.connto1, stats.connto2, stats.connclz, stats.connincom, stats.resets );
+      LastPriorityDisplayTime = millis ( ) - PriorityTime + 8000; // priority msg for 8 sec
+      break;
+  }
+  if ( StatsButtonRequest > 0 && StatsButtonRequest < 5 )
+  {
+    theSign.WritePriorityTextFile ( buff, BB_COL_GREEN );
+    PriorityOn = true;
+  }
+  else if ( PriorityOn )
+  {
+    PriorityOn = false;
+    StatsButtonRequest = 0;
+    theSign.CancelPriorityTextFile ( );
+  }
 }
 
 void StatsButtonISR ( )
@@ -889,7 +921,7 @@ void StatsButtonISR ( )
   unsigned long button_time = millis ( );
   if ( button_time - last_button_time > 250 )
   {
-    StatsButtonRequest = true;
+    StatsButtonRequest++;
     last_button_time = button_time;
   }
 }
