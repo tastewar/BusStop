@@ -120,13 +120,8 @@ Stats  stats;
 
 void setup ( )
 {
-  unsigned long *pSR;
-  pSR=(unsigned long *)0x400E1A04;
-  unsigned long x = *pSR;
-  x >>= 8;
-  x &= 7;
-  x = min ( x, 5 );
-  ResetType = (char)x;
+  unsigned char x = ( REG_RSTC_SR & RSTC_SR_RSTTYP_Msk ) >> RSTC_SR_RSTTYP_Pos;
+  ResetType = min ( x, 5 );
 #if defined DEBUG
   WDT_Disable(WDT);
   Serial.begin ( 9600 );
