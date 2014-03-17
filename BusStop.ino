@@ -3,9 +3,9 @@
 
 // Author: Tom Stewart
 // Date: March 2014
-// Version: 0.73
+// Version: 0.74
 
-#define Version "0.73"
+#define Version "0.74"
 
 #include <Wire.h>
 #include <stdint.h>
@@ -36,7 +36,7 @@
 #define MaxPriorityMessageLength BB_MAX_STRING_FILE_SIZE
 #define MaxAlertMessageLength 230
 #define MilliSecondsBetweenChecks 10000
-#define PriorityTime 10000
+#define PriorityTime 12000
 #define buflen 150
 #define WiFiResetPin 106
 #define LEDPin 13
@@ -59,7 +59,8 @@
 
 unsigned long LastCheckTime, MBTAEpochTime, TimeTimeStamp, LastPriorityDisplayTime, LastSuccessfulPredictionTime;
 unsigned char numRoutes=0;
-char signFile='A', firstAlertFile, WiFiProblems, lastRunSeq[RunSeqMax];
+char signFile='A', firstAlertFile, WiFiProblems, lastRunSeq[RunSeqMax], ResetType;
+char ResetTypes[6][12]={"General","Backup","Watchdog","Software","User","Unknown"};
 bool PriorityOn, XMLDone;
 volatile bool StatsButtonRequest;
 TinyXML xml;
@@ -119,6 +120,13 @@ Stats  stats;
 
 void setup ( )
 {
+  unsigned long *pSR;
+  pSR=(unsigned long *)0x400E1A04;
+  unsigned long x = *pSR;
+  x >>= 8;
+  x &= 7;
+  x = min ( x, 5 );
+  ResetType = (char)x;
 #if defined DEBUG
   WDT_Disable(WDT);
   Serial.begin ( 9600 );
@@ -873,8 +881,8 @@ void ShowStatistics ( )
   predsec = ( millis ( ) - LastSuccessfulPredictionTime ) / 1000;
   
   sprintf ( uptime, "%uD %uH %uM", days, hours, minutes );
-  sprintf ( buff, "Uptime: %s; PredictionAge: %uS, Conns: %u; Succ %u; Fail: %u; TO1: %u; TO2: %u; Closed: %u; Incomplete: %u; Resets: %u.",
-            uptime, predsec, stats.connatt, stats.connsucc, stats.connfail, stats.connto1, stats.connto2, stats.connclz, stats.connincom, stats.resets );
+  sprintf ( buff, "PredictionAge: %uS, ResetType: %s, Uptime: %s; Conns: %u; Succ %u; Fail: %u; TO1: %u; TO2: %u; Closed: %u; Incomplete: %u; Resets: %u.",
+            predsec, ResetTypes[ResetType], uptime, stats.connatt, stats.connsucc, stats.connfail, stats.connto1, stats.connto2, stats.connclz, stats.connincom, stats.resets );
   theSign.WritePriorityTextFile ( buff, BB_COL_GREEN );
   LastPriorityDisplayTime = millis ( );
   PriorityOn = true;
