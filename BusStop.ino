@@ -1,21 +1,29 @@
-#include <BB2DEFS.h>
-#include <BETABRITE2.h>
-
 // Author: Tom Stewart
 // Date: March 2014
 // Version: 0.76
 
-#define Version "0.76"
+// *********
+// Libraries
+// *********
 
+#include <BB2DEFS.h>
+#include <BETABRITE2.h>
 #include <Wire.h>
 #include <stdint.h>
 #include <RTClib.h>
 #include <TinyXML.h>
 #include <DigiFi.h>
 #include <LinkedList.h>
+// next file needs to include one definition for the private MBTA key, like #define MBTAAPIKeyPrivate "wX9NwuHnZU2ToO7GmGR9uw"
+#include "MBTAKey.h"
 
-#define SECONDS_FROM_1970_TO_2000 946684800
+// ***********
+// Definitions
+// ***********
+
+#define Version "0.76"
 #define TIME_ZONE_OFFSET -14400
+// URL parts
 #define StopNumber "2282"
 #define Outbound "0"
 #define Inbound "1"
@@ -25,8 +33,6 @@
 #define MBTAServer "realtime.mbta.com"
 #define MBTARootURL "/developer/api/v1/"
 #define MBTAAPIKeyParam "?api_key="
-// replace next value with personal one
-#define MBTAAPIKeyPrivate "wX9NwuHnZU2ToO7GmGR9uw"
 #define MBTAAPIKey MBTAAPIKeyParam MBTAAPIKeyPrivate
 #define MBTATimeURL MBTARootURL "servertime" MBTAAPIKey
 #define MBTARoutesByStopURL MBTARootURL "routesbystop" MBTAAPIKey "&stop=" StopNumber
@@ -38,6 +44,7 @@
 #define MilliSecondsBetweenChecks 10000
 #define PriorityTime 12000
 #define buflen 150
+// pins
 #define WiFiResetPin 106
 #define LEDPin 13
 #define StatsButtonPin 2
@@ -47,8 +54,13 @@
 #define AlertLabelFile '3'
 #define RunSeqMax 32
 
-//#define DEBUG
 
+// *********************
+// Debugging definitions
+// un-comment next line
+// *********************
+
+// #define DEBUG
 #if defined DEBUG
 #define DebugOutLn(a) Serial.println(a)
 #define DebugOut(a) Serial.print(a)
@@ -57,14 +69,9 @@
 #define DebugOut(a)
 #endif
 
-unsigned long LastCheckTime, MBTAEpochTime, TimeTimeStamp, LastPriorityDisplayTime, LastSuccessfulPredictionTime;
-unsigned char numRoutes=0;
-char signFile='A', firstAlertFile, WiFiProblems, lastRunSeq[RunSeqMax], ResetType;
-char ResetTypes[6][12]={"General","Backup","Watchdog","Software","User","Unknown"};
-bool PriorityOn, XMLDone;
-volatile unsigned char StatsButtonRequest;
-TinyXML xml;
-uint8_t boofer[buflen];
+// *********************
+// Structure definitions
+// *********************
 
 typedef struct _Stats
 {
@@ -110,17 +117,32 @@ typedef struct _AlertMsg
   char           Message[MaxAlertMessageLength+1]; //max 125 characters plus terminating null
 } AlertMsg;
 
-LinkedList<AlertMsg*> ActiveAlertList = LinkedList<AlertMsg*>();
-LinkedList<AlertMsg*> FreeAlertList = LinkedList<AlertMsg*>();
-LinkedList<RoutePred*> RouteList = LinkedList<RoutePred*>();
+// ****************
+// Global Variables
+// ****************
 
-DigiFi  wifi;
-BETABRITE theSign ( Serial2 );
-Stats  stats;
+LinkedList<AlertMsg*>   ActiveAlertList = LinkedList<AlertMsg*>();
+LinkedList<AlertMsg*>   FreeAlertList = LinkedList<AlertMsg*>();
+LinkedList<RoutePred*>  RouteList = LinkedList<RoutePred*>();
+DigiFi                  wifi;
+BETABRITE               theSign ( Serial2 );
+Stats                   stats;
+unsigned long           LastCheckTime, MBTAEpochTime, TimeTimeStamp, LastPriorityDisplayTime, LastSuccessfulPredictionTime;
+unsigned char           numRoutes=0;
+char                    signFile='A', firstAlertFile, WiFiProblems, lastRunSeq[RunSeqMax], ResetType;
+char                    ResetTypes[6][12]={"General","Backup","Watchdog","Software","User","Unknown"};
+bool                    PriorityOn, XMLDone;
+volatile unsigned char  StatsButtonRequest;
+TinyXML                 xml;
+uint8_t                 boofer[buflen];
 
+// ************************
+// setup and loop functions
+// ************************
 void setup ( )
 {
   unsigned char x = ( REG_RSTC_SR & RSTC_SR_RSTTYP_Msk ) >> RSTC_SR_RSTTYP_Pos;
+  unsigned long wst;
   ResetType = min ( x, 5 );
 #if defined DEBUG
   WDT_Disable(WDT);
@@ -134,7 +156,6 @@ void setup ( )
   unsigned long wdp_ms = 2048; // 8 seconds
   WDT_Enable( WDT, 0x2000 | wdp_ms | ( wdp_ms << 16 ));
 #endif
-  unsigned long wst;
   pinMode ( WiFiResetPin, OUTPUT );
   pinMode ( LEDPin, OUTPUT );
   pinMode ( StatsButtonPin, INPUT_PULLUP );
@@ -174,6 +195,10 @@ void loop ( )
   MaybeCancelAlert ( );
 }
 
+// ******************************
+// child functions called by loop
+// ******************************
+
 void MBTACountRoutesByStop ( )
 {
   ImStillAlive ( );
@@ -186,10 +211,10 @@ void MBTACountRoutesByStop ( )
 
 void ConfigureDisplay ( )
 {
-  unsigned int i, s;
-  RoutePred   *pRoute;
-  AlertMsg    *pAlert;
-  char AlertFileText[5]="\0203\020a"; // call file 3, call file 'a'
+  unsigned int  i, s;
+  RoutePred     *pRoute;
+  AlertMsg      *pAlert;
+  char          AlertFileText[5]="\0203\020a"; // call file 3, call file 'a'
   
   ImStillAlive ( );
   theSign.CancelPriorityTextFile ( );
@@ -250,23 +275,17 @@ void DHCPandStatusCheck ( )
 
 void MaybeUpdateDisplay ( )
 {
-  // for BetaBrite, we'll have to update the run sequence when the list of active alerts changes
-  // for console output, just check for things that haven't been displayed yet
-  // in this function, need to check for alerts that have expired and move them from active to free
-  // as well as remove them from the BB rotation
-  //
-  unsigned long tempMin;
-  char  runSeqIndex=0, strbuf[256], tempRunSeq[RunSeqMax];
+  unsigned long  tempMin;
+  char           runSeqIndex=0, strbuf[256], tempRunSeq[RunSeqMax];
+  int            i, s;
+  RoutePred      *pRoute;
+  AlertMsg       *pAlert;
 
   ImStillAlive ( );
   MaybeCancelAlert ( );
   MaybeDisplayTime ( strbuf );
 
   if ( MBTAEpochTime ) tempRunSeq[runSeqIndex++] = TimeLabelFile;
-
-  int i, s;
-  RoutePred   *pRoute;
-  AlertMsg    *pAlert;
   
   s = RouteList.size ( );
   for ( i=0; i<s; i++ )
@@ -274,15 +293,16 @@ void MaybeUpdateDisplay ( )
     pRoute = RouteList.get ( i );
     if ( !pRoute->displayed )
     {
-      int j;
+      int   j;
       Pred  *pPred;
+
       strbuf[0]='\0';
       for ( j=0; j<pRoute->activePreds; j++ )
       {
         char  numbuff[6];
         long  mins;
         
-        pPred=&pRoute->pred[j];
+        pPred = &pRoute->pred[j];
         if ( pPred->layover ) strcat ( strbuf, "*" );
         unsigned long elapsedMS = millis ( ) - pPred->timestamp;
         mins = ( pPred->seconds - ( elapsedMS / 1000 ) ) / 60;
@@ -355,7 +375,8 @@ void MaybeUpdateDisplay ( )
 
 void MaybeCheckForNewData ( )
 {
-  static unsigned char which;
+  static unsigned char  which;
+
   if ( millis ( ) - LastCheckTime > MilliSecondsBetweenChecks )
   {
     switch ( which )
@@ -380,9 +401,14 @@ void MaybeCheckForNewData ( )
   }
 }
 
+// ******************************************************
+// main parser driver function and XML callback functions
+// ******************************************************
+
 boolean GetXML ( char *ServerName, char *Page, XMLcallback fcb )
 {
-  bool failed=false;
+  bool  failed=false;
+
   XMLDone = false;
   ImStillAlive ( );
   xml.init ( (uint8_t*)&boofer, buflen, fcb );
@@ -481,7 +507,7 @@ void NextBusCheckPredictions ( )
 
 void ServerTimeXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  char* data,  uint16_t dataLen )
 {
-  static char *pTag;
+  static char  *pTag;
 
   MaybeCancelAlert ( );
   ImStillAlive ( );  
@@ -516,8 +542,8 @@ void ServerTimeXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,
 
 void RouteListXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  char* data,  uint16_t dataLen )
 {
-  static char *pTag;
-  static bool BusMode=false;
+  static char       *pTag;
+  static bool       BusMode=false;
   static RoutePred  *pCR;
   
   MaybeCancelAlert ( );
@@ -568,10 +594,10 @@ void RouteListXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen, 
 
 void AlertsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  char* data,  uint16_t dataLen )
 {
-  static char *pTag;
-  static bool PastStartTime, NewInfo;
-  static unsigned long aid;
-  static AlertMsg *pCurrentAlert;
+  static char           *pTag;
+  static bool           PastStartTime, NewInfo;
+  static unsigned long  aid;
+  static AlertMsg       *pCurrentAlert;
   
   MaybeCancelAlert ( );
   ImStillAlive ( );  
@@ -670,9 +696,9 @@ void AlertsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  ch
 
 void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  char* data,  uint16_t dataLen )
 {
-  static char *pTag;
-  static int Seconds, prdno, Vehicle;
-  static bool Approximate, NewInfo;
+  static char       *pTag;
+  static int        Seconds, prdno, Vehicle;
+  static bool       Approximate, NewInfo;
   static RoutePred  *pCR;
 
   MaybeCancelAlert ( );
@@ -778,19 +804,23 @@ void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen
   }
 }
 
+// *****************
+// utility functions
+// *****************
+
 unsigned long CurrentEpochTime ( void )
 {
-  unsigned long elapsedMS = millis ( ) - TimeTimeStamp;
-  unsigned long elapsedS = elapsedMS / 1000;
+  unsigned long  elapsedMS = millis ( ) - TimeTimeStamp;
+  unsigned long  elapsedS = elapsedMS / 1000;
   return MBTAEpochTime + elapsedS;
 }
 
 void MaybeDisplayTime ( char *buf )
 {
-  static uint8_t LastDisplayedMins=99;
-  bool pm;
-
-  DateTime dt ( CurrentEpochTime ( ) + TIME_ZONE_OFFSET );
+  static uint8_t  LastDisplayedMins=99;
+  bool            pm;
+  DateTime        dt ( CurrentEpochTime ( ) + TIME_ZONE_OFFSET );
+  
   if ( dt.minute ( ) != LastDisplayedMins )
   {
     uint8_t DisplayHour = dt.hour ( );
@@ -811,7 +841,8 @@ void MaybeDisplayTime ( char *buf )
 
 void ResetWiFi ( void )
 {
-  int i;
+  int  i;
+
   // requires SJ4 to be soldered closed (non-default) and SJ3 to be cut open (default)
   ImStillAlive ( );
   DebugOutLn ( "* * * * Resetting WiFi module! * * * *" );
@@ -838,8 +869,9 @@ void ResetWiFi ( void )
 
 void ImStillAlive ( )
 {
-  static bool ledon=false;
-  static unsigned char LastStatsReq;
+  static bool           ledon=false;
+  static unsigned char  LastStatsReq;
+
 #if !defined DEBUG
   WDT_Restart ( WDT );
 #endif
@@ -869,8 +901,9 @@ void ShowStatistics ( )
   // 3-reset type
   // 4-connections
   // 5-cancel
-  char uptime[16], buff[1024];
-  unsigned long secondsup, days, hours, minutes, predsec;
+  char           uptime[16], buff[1024];
+  unsigned long  secondsup, days, hours, minutes, predsec;
+
   switch ( StatsButtonRequest )
   {
     case 1:
@@ -917,8 +950,9 @@ void ShowStatistics ( )
 
 void StatsButtonISR ( )
 {
-  static unsigned long last_button_time;
-  unsigned long button_time = millis ( );
+  static unsigned long  last_button_time;
+  unsigned long         button_time = millis ( );
+
   if ( button_time - last_button_time > 250 )
   {
     StatsButtonRequest++;

@@ -71,7 +71,8 @@ Bugs
 ====
 Cancel Alerts when they stop showing up, even if not expired -- maybe? awaiting any feedback from group
 On startup, sometimes hit watchdog -- why?
-Saw one case where 79 showed a Now that should have been reset -- maybe we failed to note a change in vehicle?
+Saw some cases where 79 showed a Now that shouldn't have -- why? Is it significant that 79 is the first to be listed in XML?
+Also saw cases where Now had an asterisk, and some other short times did as well, suggesting some flags aren't getting cleared appropriately.
 
 Enclosure
 =========
@@ -85,3 +86,7 @@ Need to display copyright info?
 Notes
 =====
 To move into a more general case, we could have the device query for a configuration page based on the MAC address or other identifier. It could retrieve a list of stops from the config page, and use that. Must display directionTitle for that to be useful. A companion mobile app could get GPS location, query for nearby stops, allow user to select from that list, query for sign id (?), then post a config page. Ideally it could *all* be NextBus API based, as that extends the marketability. If NextBus only, will need to get time elsewhere, & program in stupid DST rules. TimeZone would be part of config page.
+
+Big Re-Org
+=== ======
+Would need to have a hierarchy that represented stops, routes, directions.
