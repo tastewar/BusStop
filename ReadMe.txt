@@ -2,17 +2,17 @@ The intent of this program is to periodically check predicted bus arrival times 
 
 Route: arr1, arr2, arr3, arr4, arr5
 
-where Route is the route number, and the arr times are minutes until the predicted arrival times. If the nth time has the "affectedByLayover" flag set, that prediction will be preceded with a tilde to indicate "approximately," e.g.:
+where Route is the route number, and the arr times are minutes until the predicted arrival times. If the nth time has the "affectedByLayover" flag set, that prediction will be preceded with an asterisk to indicate "approximately," e.g.:
 
-77: 1, 7, 11, ~21, ~32
+77: 1, 7, 11, *21, *32
 
 To avoid "flashing" behavior when updating the strings, the sign will use a string file for predicted times, and a text file for each route, and the route file will reference the corresponding prediction string.
 
-In addition, when predicted minutes is zero, a priority alert will be displayed with the text:
+In addition, when predicted minutes is zero, a priority alert will be displayed with text similar to the following:
 
-<route>: !!!ARRIVING!!!
+< < < 77: NOW! > > >
 
-in flashing letters, for 30 seconds
+in flashing letters, for 12 seconds
 
 Outside of any alerts, the sign will cycle through displaying the MBTA current time, the current alert (if any) for the programmed stop, and then the list of routes, one at a time.
 

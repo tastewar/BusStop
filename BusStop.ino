@@ -38,21 +38,25 @@
 #define MBTARoutesByStopURL MBTARootURL "routesbystop" MBTAAPIKey "&stop=" StopNumber
 #define MBTAScheduleByStopURL MBTARootURL "schedulebystop" MBTAAPIKey "&stop=" StopNumber "&direction=" Outbound
 #define MBTAAlertsByStopURL MBTARootURL "alertsbystop" MBTAAPIKey "&stop=" StopNumber
-#define MaxNextBusPredictions 5
-#define MaxPriorityMessageLength BB_MAX_STRING_FILE_SIZE
-#define MaxAlertMessageLength 230
+// times
 #define MilliSecondsBetweenChecks 10000
 #define PriorityTime 12000
+// lengths
+#define MaxPriorityMessageLength BB_MAX_STRING_FILE_SIZE
 #define buflen 150
+#define MaxAlertMessageLength 230
+#define RunSeqMax 32
 // pins
 #define WiFiResetPin 106
 #define LEDPin 13
 #define StatsButtonPin 2
+// other numbers...
 #define MaxWiFiProblems 3
+#define MaxNextBusPredictions 5
+// BetaBrite file labels
 #define TimeLabelFile '1'
 #define TimeStringFile '2'
 #define AlertLabelFile '3'
-#define RunSeqMax 32
 
 
 // *********************
