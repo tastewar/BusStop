@@ -94,7 +94,8 @@ typedef struct _Pred
 {
   boolean        layover;
   boolean        alerted;
-  int            vehicle;
+  long           vehicle;
+  long           triptag;
   long           seconds; // signed so we can use -1 as a special value
   unsigned long  lastdisplayedmins;
   unsigned long  timestamp;
@@ -701,8 +702,8 @@ void AlertsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  ch
 void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  char* data,  uint16_t dataLen )
 {
   static char       *pTag;
-  static int        Seconds, prdno, Vehicle;
-  static bool       Approximate, NewInfo;
+  static int        Seconds, prdno, Vehicle, TripTag;
+  static bool       Layover, NewInfo;
   static RoutePred  *pCR;
 
   MaybeCancelAlert ( );
@@ -716,7 +717,7 @@ void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen
       if ( strcmp ( tagName, "/body/predictions/direction/prediction" ) == 0 )
       {
         Seconds = -1;
-        Approximate = false;
+        Layover = false;
         Vehicle = 0;
       }
       else if ( strcmp ( tagName, "/body/predictions" ) == 0 )
@@ -748,17 +749,24 @@ void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen
           }
         }
       }
-      else if ( strcmp ( tagName, "seconds" ) == 0 && strcmp ( pTag, "/body/predictions/direction/prediction" ) == 0 )
+      else if ( strcmp ( pTag, "/body/predictions/direction/prediction" ) == 0 )
       {
-        Seconds = atol ( data );
-      }
-      else if ( strcmp ( tagName, "affectedByLayover" ) == 0 && strcmp ( pTag, "/body/predictions/direction/prediction" ) == 0 )
-      {
-        Approximate = true;
-      }
-      else if ( strcmp ( tagName, "vehicle" ) == 0 && strcmp ( pTag, "/body/predictions/direction/prediction" ) == 0 )
-      {
-        Vehicle = atol ( data );
+        if ( strcmp ( tagName, "seconds" ) == 0 )
+        {
+          Seconds = atol ( data );
+        }
+        else if ( strcmp ( tagName, "affectedByLayover" ) == 0 )
+        {
+          Layover = true;
+        }
+        else if ( strcmp ( tagName, "vehicle" ) == 0 )
+        {
+          Vehicle = atol ( data );
+        }
+        else if ( strcmp ( tagName, "tripTag" ) == 0 )
+        {
+          TripTag = atol ( data );
+        }
       }
     }
   }
@@ -768,9 +776,9 @@ void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen
     {
       if ( Seconds != -1 )
       {
-        if ( pCR->pred[prdno].layover != Approximate )
+        if ( pCR->pred[prdno].layover != Layover )
         {
-          pCR->pred[prdno].layover = Approximate;
+          pCR->pred[prdno].layover = Layover;
           NewInfo = true;
         }
         if ( pCR->pred[prdno].seconds != Seconds )
@@ -779,9 +787,10 @@ void PredictionsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen
           pCR->pred[prdno].timestamp = millis ( );
           NewInfo = true;
         }
-        if ( pCR->pred[prdno].vehicle != Vehicle )
+        if ( pCR->pred[prdno].vehicle != Vehicle || pCR->pred[prdno].triptag != TripTag )
         {
           pCR->pred[prdno].vehicle = Vehicle;
+          pCR->pred[prdno].triptag = TripTag;
           NewInfo = true;
           pCR->pred[prdno].alerted = false;
         }
