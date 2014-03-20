@@ -1,6 +1,6 @@
 // Author: Tom Stewart
 // Date: March 2014
-// Version: 0.76
+// Version: 0.77
 
 // *********
 // Libraries
@@ -21,7 +21,7 @@
 // Definitions
 // ***********
 
-#define Version "0.76"
+#define Version "0.77"
 #define TIME_ZONE_OFFSET -14400
 // URL parts
 #define StopNumber "2282"
