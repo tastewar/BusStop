@@ -1,6 +1,6 @@
 // Author: Tom Stewart
 // Date: March 2014
-// Version: 0.77
+// Version: 0.78
 
 // *********
 // Libraries
@@ -21,7 +21,7 @@
 // Definitions
 // ***********
 
-#define Version "0.77"
+#define Version "0.78"
 #define TIME_ZONE_OFFSET -14400
 // URL parts
 #define StopNumber "2282"
@@ -144,6 +144,7 @@ uint8_t                 boofer[buflen];
 // ************************
 // setup and loop functions
 // ************************
+
 void setup ( )
 {
   unsigned char x = ( REG_RSTC_SR & RSTC_SR_RSTTYP_Msk ) >> RSTC_SR_RSTTYP_Pos;
@@ -152,10 +153,13 @@ void setup ( )
 #if defined DEBUG
   WDT_Disable(WDT);
   Serial.begin ( 9600 );
-  while ( !Serial.available ( ) )
+  if ( ResetType != 2 ) // not a watchdog reset
   {
-    DebugOutLn ( "Enter any key to begin" );
-    delay ( 1000 );
+    while ( !Serial.available ( ) )
+    {
+      DebugOutLn ( "Enter any key to begin" );
+      delay ( 1000 );
+    }
   }
 #else
   unsigned long wdp_ms = 2048; // 8 seconds
@@ -170,7 +174,14 @@ void setup ( )
   Serial2.begin ( 9600 );
   ResetWiFi ( );
   DebugOutLn ( "Starting setup..." );
-  theSign.WritePriorityTextFile ( "BusStopSign v" Version " starting up..." );
+  if ( ResetType == 2 )
+  {
+    theSign.CancelPriorityTextFile ( );
+  }
+  else
+  {
+    theSign.WritePriorityTextFile ( "BusStopSign v" Version " starting up..." );
+  }
   wst = millis ( );
   do
   {
@@ -186,7 +197,10 @@ void setup ( )
   
   DebugOutLn ( "Connected to wifi!" );
   MBTACountRoutesByStop ( );
-  ConfigureDisplay ( );
+  if ( ResetType != 2 )
+  { // assume the sign has retained settings
+    ConfigureDisplay ( );
+  }
   LastCheckTime = millis ( ) - MilliSecondsBetweenChecks;
   DebugOutLn ( "Done with setup." );
 }
@@ -200,9 +214,9 @@ void loop ( )
   MaybeCancelAlert ( );
 }
 
-// ******************************
-// child functions called by loop
-// ******************************
+// *******************************
+// child functions called by setup
+// *******************************
 
 void MBTACountRoutesByStop ( )
 {
@@ -273,6 +287,10 @@ void ConfigureDisplay ( )
   }
   theSign.EndCommand ( );
 }
+
+// ******************************
+// child functions called by loop
+// ******************************
 
 void DHCPandStatusCheck ( )
 {
