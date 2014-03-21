@@ -18,7 +18,7 @@ Outside of any alerts, the sign will cycle through displaying the MBTA current t
 
 If a new alert comes up, it will be displayed as a priority text file for 30 seconds, then the priority file will be cancelled and the alert will remain as an ordinary message in sequence.
 
-Since alerts are unpredictable, and there can be any number active at a given time, we will allocate memory for them on the fly, and track them in two linked lists: active, and available. When a new alert comes in, we will first look for an available buffer, but if not found, we will allocate a new one. Buffers move to the available list when the alert expires.
+Since alerts are unpredictable, and there can be any number active at a given time, we will allocate memory for them on the fly, and track them in two linked lists: active, and available. When a new alert comes in, we will first look for an available buffer, but if not found, we will allocate a new one. Buffers move to the available list when the alert expires. The sign, configured as below, can therefore support a total of 26 prediction strings + alerts.
 
 configure 1 file to display the time with the text "MBTA Time: " and a ref to a date string file, space, ref to a time string file + any formatting
 configure n text files, 1 for each route with 12 characters for route number, a colon, a space, any formatting, and a reference to a string file

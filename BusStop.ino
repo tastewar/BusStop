@@ -1,6 +1,6 @@
 // Author: Tom Stewart
 // Date: March 2014
-// Version: 0.79
+// Version: 0.80
 
 // *********
 // Libraries
@@ -21,7 +21,7 @@
 // Definitions
 // ***********
 
-#define Version "0.79"
+#define Version "0.80"
 #define TIME_ZONE_OFFSET -14400
 // URL parts
 #define StopNumber "2282"
@@ -41,6 +41,7 @@
 // times
 #define MilliSecondsBetweenChecks 10000
 #define PriorityTime 12000
+#define MinTimeBtwnButtonPresses 500
 // lengths
 #define MaxPriorityMessageLength BB_MAX_STRING_FILE_SIZE
 #define buflen 150
@@ -54,9 +55,9 @@
 #define MaxWiFiProblems 3
 #define MaxNextBusPredictions 5
 // BetaBrite file labels
-#define DateLabelFile '1'
+#define DateLabelFile  '1'
 #define DateStringFile '2'
-#define TimeLabelFile '3'
+#define TimeLabelFile  '3'
 #define TimeStringFile '4'
 #define AlertLabelFile '5'
 
@@ -124,6 +125,7 @@ typedef struct _AlertMsg
   char           signFile;
   unsigned long  MessageID;
   unsigned long  Expiration;
+  unsigned long  timestamp;
   char           Message[MaxAlertMessageLength+1]; //max 125 characters plus terminating null
 } AlertMsg;
 
@@ -137,7 +139,8 @@ LinkedList<RoutePred*>  RouteList = LinkedList<RoutePred*>();
 DigiFi                  wifi;
 BETABRITE               theSign ( Serial2 );
 Stats                   stats;
-unsigned long           LastCheckTime, MBTAEpochTime, TimeTimeStamp, LastPriorityDisplayTime, LastSuccessfulPredictionTime;
+unsigned long           LastCheckTime, MBTAEpochTime, TimeTimeStamp, LastPriorityDisplayTime, LastSuccessfulPredictionTime,
+                        AlertParseStart, LastSuccessfulAlertParse;
 unsigned char           numRoutes=0;
 char                    signFile='A', firstAlertFile, WiFiProblems, lastRunSeq[RunSeqMax], ResetType;
 char                    ResetTypes[6][12]={"General","Backup","Watchdog","Software","User","Unknown"};
@@ -238,7 +241,9 @@ void ConfigureDisplay ( )
   unsigned int  i, s;
   RoutePred     *pRoute;
   AlertMsg      *pAlert;
-  char          AlertFileText[5]="\0205\020a"; // call file 5, call file 'a'
+  char          AlertFileText[5]={ BB_FC_CALLSTRING, AlertLabelFile, BB_FC_CALLSTRING, 'a', '\0' }; // 'a' is placeholder to be replaced in loop
+  char          datestuff[3]={BB_FC_CALLSTRING,DateStringFile,'\0'};
+  char          timestuff[3]={BB_FC_CALLSTRING,TimeStringFile,'\0'};
   
   ImStillAlive ( );
   theSign.CancelPriorityTextFile ( );
@@ -273,10 +278,10 @@ void ConfigureDisplay ( )
   //
   theSign.BeginCommand ( );
   theSign.BeginNestedCommand ( );
-  theSign.WriteTextFileNested ( DateLabelFile, "\0202", BB_COL_GREEN, BB_DP_TOPLINE, BB_DM_WIPERIGHT );
+  theSign.WriteTextFileNested ( DateLabelFile, datestuff, BB_COL_GREEN, BB_DP_TOPLINE, BB_DM_WIPERIGHT );
   theSign.EndNestedCommand ( );
   theSign.BeginNestedCommand ( );
-  theSign.WriteTextFileNested ( TimeLabelFile, "\0204", BB_COL_GREEN, BB_DP_TOPLINE, BB_DM_WIPELEFT );
+  theSign.WriteTextFileNested ( TimeLabelFile, timestuff, BB_COL_GREEN, BB_DP_TOPLINE, BB_DM_WIPELEFT );
   theSign.EndNestedCommand ( );
   theSign.BeginNestedCommand ( );
   theSign.WriteStringFileNested ( AlertLabelFile, "Alert: " );
@@ -382,18 +387,42 @@ void MaybeUpdateDisplay ( )
   s = ActiveAlertList.size ( );
   for ( i=0; i<s; i++ )
   {
+    unsigned long  ts = millis ( );
+
     pAlert = ActiveAlertList.get ( i );
-    if ( MBTAEpochTime > pAlert->Expiration )
-    {
+    if ( MBTAEpochTime > pAlert->Expiration || ( ts - LastSuccessfulAlertParse < ts  - pAlert->timestamp ) )
+    { // either expired or didn't show up in last completed parse
       ActiveAlertList.remove ( i );
       FreeAlertList.add ( pAlert );
       break;
     }
     if ( !pAlert->alerted && !PriorityOn )
     {
+      char  temp[4], diff;
+      
       LastPriorityDisplayTime = millis ( );
       PriorityOn = true;
+      // temporarily truncate message if long; assumes Message field is at least one byte bigger than MaxPriorityMessageLength!
+      diff = MaxPriorityMessageLength - strlen ( pAlert->Message );
+      if ( diff < 0 ) // Message too long
+      {
+        temp[3] = pAlert->Message[MaxPriorityMessageLength];
+        pAlert->Message[MaxPriorityMessageLength] = '\0';
+        temp[2] = pAlert->Message[MaxPriorityMessageLength-1];
+        pAlert->Message[MaxPriorityMessageLength-1] = '.';
+        temp[1] = pAlert->Message[MaxPriorityMessageLength-2];
+        pAlert->Message[MaxPriorityMessageLength-1] = '.';
+        temp[0] = pAlert->Message[MaxPriorityMessageLength-3];
+        pAlert->Message[MaxPriorityMessageLength-1] = '.';
+      }
       theSign.WritePriorityTextFile ( pAlert->Message, BB_COL_ORANGE, BB_DP_TOPLINE );
+      if ( diff < 0 )
+      { // restore saved characters
+        pAlert->Message[MaxPriorityMessageLength] = temp[3];
+        pAlert->Message[MaxPriorityMessageLength-1] = temp[2];
+        pAlert->Message[MaxPriorityMessageLength-2] = temp[1];
+        pAlert->Message[MaxPriorityMessageLength-3] = temp[0];
+      }
       pAlert->alerted = true;
     }
     if ( !pAlert->displayed )
@@ -439,6 +468,25 @@ void MaybeCheckForNewData ( )
     LastCheckTime = millis ( );
     ++which %= 8;
   }
+}
+
+void MBTACheckTime ( )
+{
+  DebugOutLn ( "Checking the time..." );
+  GetXML ( MBTAServer, MBTATimeURL, ServerTimeXMLCB );
+}
+
+void MBTACheckAlerts ( )
+{
+  DebugOutLn ( "Checking alerts..." );
+  AlertParseStart = millis ( );
+  if ( GetXML ( MBTAServer, MBTAAlertsByStopURL, AlertsXMLCB ) ) LastSuccessfulAlertParse = AlertParseStart;
+}
+
+void NextBusCheckPredictions ( )
+{
+  DebugOutLn ( "Checking predictions..." );
+  GetXML ( NextBusServer, NextBusPredictionURL, PredictionsXMLCB );
 }
 
 // ******************************************************
@@ -525,24 +573,6 @@ boolean GetXML ( char *ServerName, char *Page, XMLcallback fcb )
   else if ( ++stats.connincom % MaxWiFiProblems == 0 ) ResetWiFi ( );
   ImStillAlive ( );
   return XMLDone;
-}
-
-void MBTACheckTime ( )
-{
-  DebugOutLn ( "Checking the time..." );
-  GetXML ( MBTAServer, MBTATimeURL, ServerTimeXMLCB );
-}
-
-void MBTACheckAlerts ( )
-{
-  DebugOutLn ( "Checking alerts..." );
-  GetXML ( MBTAServer, MBTAAlertsByStopURL, AlertsXMLCB );
-}
-
-void NextBusCheckPredictions ( )
-{
-  DebugOutLn ( "Checking predictions..." );
-  GetXML ( NextBusServer, NextBusPredictionURL, PredictionsXMLCB );
 }
 
 void ServerTimeXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  char* data,  uint16_t dataLen )
@@ -676,6 +706,7 @@ void AlertsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  ch
           if ( pAlert->MessageID == aid )
           {
             pCurrentAlert = pAlert;
+            pCurrentAlert->timestamp = AlertParseStart;
             NewInfo = false;
             break;
           }
@@ -695,6 +726,7 @@ void AlertsXMLCB ( uint8_t statusflags, char* tagName,  uint16_t tagNameLen,  ch
           {
             ActiveAlertList.add ( pCurrentAlert );
             pCurrentAlert->MessageID = aid;
+            pCurrentAlert->timestamp = AlertParseStart;
             NewInfo = true;
           }
         }
@@ -1010,7 +1042,7 @@ void StatsButtonISR ( )
   static unsigned long  last_button_time;
   unsigned long         button_time = millis ( );
 
-  if ( button_time - last_button_time > 250 )
+  if ( button_time - last_button_time > MinTimeBtwnButtonPresses )
   {
     StatsButtonRequest++;
     last_button_time = button_time;
