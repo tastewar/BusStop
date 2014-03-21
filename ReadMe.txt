@@ -31,9 +31,11 @@ add 4 bytes for a basic text file, plus 2 bytes for every ref, plus the string
 Label	Type	RawSize	Size	Use					Formatting
 =====	====	====	====	===					==========
 0	T	XXX	XXX	priority file				Flashing, brightest color
-1	T	10	20	"MBTA Time: "@2				Green
-2	S	32	36	<time>					-none-
-3	S	10	16	"Alert: "				-none-
+1	T	10	20	@2					Green
+2	S	32	36	<date>					-none-
+3	T	10	20	@4					Green
+4	S	32	36	<time>					-none-
+5	S	16	26	"New Alert: "				-none-
 A-?	T	14	24	<route>: @companion string		Yellow
 a-?	S	32	36	<companion string files for routes>	-none-
 ?-Z	T	0	12	@3@companion string			Amber

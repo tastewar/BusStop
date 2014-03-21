@@ -1,6 +1,6 @@
 // Author: Tom Stewart
 // Date: March 2014
-// Version: 0.78
+// Version: 0.79
 
 // *********
 // Libraries
@@ -21,7 +21,7 @@
 // Definitions
 // ***********
 
-#define Version "0.78"
+#define Version "0.79"
 #define TIME_ZONE_OFFSET -14400
 // URL parts
 #define StopNumber "2282"
@@ -54,9 +54,11 @@
 #define MaxWiFiProblems 3
 #define MaxNextBusPredictions 5
 // BetaBrite file labels
-#define TimeLabelFile '1'
-#define TimeStringFile '2'
-#define AlertLabelFile '3'
+#define DateLabelFile '1'
+#define DateStringFile '2'
+#define TimeLabelFile '3'
+#define TimeStringFile '4'
+#define AlertLabelFile '5'
 
 
 // *********************
@@ -236,15 +238,20 @@ void ConfigureDisplay ( )
   unsigned int  i, s;
   RoutePred     *pRoute;
   AlertMsg      *pAlert;
-  char          AlertFileText[5]="\0203\020a"; // call file 3, call file 'a'
+  char          AlertFileText[5]="\0205\020a"; // call file 5, call file 'a'
   
   ImStillAlive ( );
   theSign.CancelPriorityTextFile ( );
   // CLEAR MEMORY
   theSign.StartMemoryConfigurationCommand ( );
   theSign.EndMemoryConfigurationCommand ( );
+  delay ( BB_BETWEEN_COMMAND_DELAY );
   // memory configuration
   theSign.StartMemoryConfigurationCommand ( );
+  // MBTA Time label
+  theSign.SetMemoryConfigurationSection ( DateLabelFile, 1, 20, BB_SFFT_TEXT, true, BB_RT_NEVER );
+  // time string
+  theSign.SetMemoryConfigurationSection ( DateStringFile, 1, 36, BB_SFFT_STRING );
   // MBTA Time label
   theSign.SetMemoryConfigurationSection ( TimeLabelFile, 1, 20, BB_SFFT_TEXT, true, BB_RT_NEVER );
   // time string
@@ -266,7 +273,10 @@ void ConfigureDisplay ( )
   //
   theSign.BeginCommand ( );
   theSign.BeginNestedCommand ( );
-  theSign.WriteTextFileNested ( TimeLabelFile, "MBTA Time: \0202", BB_COL_GREEN );
+  theSign.WriteTextFileNested ( DateLabelFile, "\0202", BB_COL_GREEN, BB_DP_TOPLINE, BB_DM_WIPERIGHT );
+  theSign.EndNestedCommand ( );
+  theSign.BeginNestedCommand ( );
+  theSign.WriteTextFileNested ( TimeLabelFile, "\0204", BB_COL_GREEN, BB_DP_TOPLINE, BB_DM_WIPELEFT );
   theSign.EndNestedCommand ( );
   theSign.BeginNestedCommand ( );
   theSign.WriteStringFileNested ( AlertLabelFile, "Alert: " );
@@ -302,16 +312,20 @@ void DHCPandStatusCheck ( )
 void MaybeUpdateDisplay ( )
 {
   unsigned long  tempMin;
-  char           runSeqIndex=0, strbuf[256], tempRunSeq[RunSeqMax];
+  char           runSeqIndex=0, tempRunSeq[RunSeqMax], strbuf[256];
   int            i, s;
   RoutePred      *pRoute;
   AlertMsg       *pAlert;
 
   ImStillAlive ( );
   MaybeCancelAlert ( );
-  MaybeDisplayTime ( strbuf );
+  MaybeUpdateDateAndTime ( );
 
-  if ( MBTAEpochTime ) tempRunSeq[runSeqIndex++] = TimeLabelFile;
+  if ( MBTAEpochTime )
+  {
+    tempRunSeq[runSeqIndex++] = DateLabelFile;
+    tempRunSeq[runSeqIndex++] = TimeLabelFile;
+  }
   
   s = RouteList.size ( );
   for ( i=0; i<s; i++ )
@@ -849,9 +863,10 @@ unsigned long CurrentEpochTime ( void )
   return MBTAEpochTime + elapsedS;
 }
 
-void MaybeDisplayTime ( char *buf )
+void MaybeUpdateDateAndTime ( )
 {
   static uint8_t  LastDisplayedMins=99;
+  char            buf[64];
   bool            pm;
   DateTime        dt ( CurrentEpochTime ( ) + TIME_ZONE_OFFSET );
   
@@ -866,7 +881,9 @@ void MaybeDisplayTime ( char *buf )
     else pm = false;
     if ( DisplayHour == 0 ) DisplayHour = 12;
     
-    sprintf ( buf, "%d/%d/%d %02d:%02d %s", dt.year(), dt.month(), dt.day(), DisplayHour, dt.minute(), pm ? "PM" : "AM" );
+    sprintf ( buf, "%d/%d/%d", dt.year(), dt.month(), dt.day() );
+    theSign.WriteStringFile ( DateStringFile, buf );
+    sprintf ( buf, "%02d:%02d %s", DisplayHour, dt.minute(), pm ? "PM" : "AM" );
     theSign.WriteStringFile ( TimeStringFile, buf );
     DebugOutLn ( buf );
     LastDisplayedMins = dt.minute ( );
