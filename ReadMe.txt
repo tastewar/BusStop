@@ -20,7 +20,7 @@ If a new alert comes up, it will be displayed as a priority text file for 30 sec
 
 Since alerts are unpredictable, and there can be any number active at a given time, we will allocate memory for them on the fly, and track them in two linked lists: active, and available. When a new alert comes in, we will first look for an available buffer, but if not found, we will allocate a new one. Buffers move to the available list when the alert expires. The sign, configured as below, can therefore support a total of 26 prediction strings + alerts.
 
-configure 1 file to display the time with the text "MBTA Time: " and a ref to a date string file, space, ref to a time string file + any formatting
+configure 1 file to display the date and another the time each with a ref to a corresponding string file, plus any formatting
 configure n text files, 1 for each route with 12 characters for route number, a colon, a space, any formatting, and a reference to a string file
 configure n string files, 1 for the predictions of each route. 5 predictions, and for each prediction maybe a tilde, 3 digits, a comma, and a space
 divide the remaining files in half, with half being text files that say "Alert: " plus any formatting; the other half as string files 230 bytes long
@@ -32,7 +32,7 @@ Label	Type	RawSize	Size	Use					Formatting
 =====	====	====	====	===					==========
 0	T	XXX	XXX	priority file				Flashing, brightest color
 1	T	10	20	@2					Green
-2	S	32	36	<date>					-none-
+2	S	50	54	<date>					-none-
 3	T	10	20	@4					Green
 4	S	32	36	<time>					-none-
 5	S	16	26	"New Alert: "				-none-

@@ -144,6 +144,8 @@ unsigned long           LastCheckTime, MBTAEpochTime, TimeTimeStamp, LastPriorit
 unsigned char           numRoutes=0;
 char                    signFile='A', firstAlertFile, WiFiProblems, lastRunSeq[RunSeqMax], ResetType;
 char                    ResetTypes[6][12]={"General","Backup","Watchdog","Software","User","Unknown"};
+char                    MonthNames[12][10]={"January","February","March","April","May","June","July","August","September","October","November","December"};
+char                    DayNames[7][7]={"Sun","Mon","Tues","Wednes","Thurs","Fri","Satur"};
 bool                    PriorityOn, XMLDone;
 volatile unsigned char  StatsButtonRequest;
 TinyXML                 xml;
@@ -256,7 +258,7 @@ void ConfigureDisplay ( )
   // MBTA Time label
   theSign.SetMemoryConfigurationSection ( DateLabelFile, 1, 20, BB_SFFT_TEXT, true, BB_RT_NEVER );
   // time string
-  theSign.SetMemoryConfigurationSection ( DateStringFile, 1, 36, BB_SFFT_STRING );
+  theSign.SetMemoryConfigurationSection ( DateStringFile, 1, 54, BB_SFFT_STRING );
   // MBTA Time label
   theSign.SetMemoryConfigurationSection ( TimeLabelFile, 1, 20, BB_SFFT_TEXT, true, BB_RT_NEVER );
   // time string
@@ -278,7 +280,7 @@ void ConfigureDisplay ( )
   //
   theSign.BeginCommand ( );
   theSign.BeginNestedCommand ( );
-  theSign.WriteTextFileNested ( DateLabelFile, datestuff, BB_COL_GREEN, BB_DP_TOPLINE, BB_DM_WIPERIGHT );
+  theSign.WriteTextFileNested ( DateLabelFile, datestuff, BB_COL_GREEN );
   theSign.EndNestedCommand ( );
   theSign.BeginNestedCommand ( );
   theSign.WriteTextFileNested ( TimeLabelFile, timestuff, BB_COL_GREEN, BB_DP_TOPLINE, BB_DM_WIPELEFT );
@@ -913,9 +915,9 @@ void MaybeUpdateDateAndTime ( )
     else pm = false;
     if ( DisplayHour == 0 ) DisplayHour = 12;
     
-    sprintf ( buf, "%d/%d/%d", dt.year(), dt.month(), dt.day() );
+    sprintf ( buf, "%sday, %d %s %d", DayNames[dt.dayOfWeek()], dt.day(), MonthNames[dt.month()-1], dt.year() );
     theSign.WriteStringFile ( DateStringFile, buf );
-    sprintf ( buf, "%02d:%02d %s", DisplayHour, dt.minute(), pm ? "PM" : "AM" );
+    sprintf ( buf, "%d:%02d %s", DisplayHour, dt.minute(), pm ? "PM" : "AM" );
     theSign.WriteStringFile ( TimeStringFile, buf );
     DebugOutLn ( buf );
     LastDisplayedMins = dt.minute ( );
