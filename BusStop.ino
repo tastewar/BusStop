@@ -62,9 +62,12 @@
 // *********************
 // Debugging definitions
 // un-comment next line
+// to enable serial out
 // *********************
 
-// #define DEBUG
+//#define DEBUG
+//#define WIFIDEBUG
+
 #if defined DEBUG
 #define DebugOutLn(a) Serial.println(a)
 #define DebugOut(a) Serial.print(a)
@@ -151,7 +154,7 @@ void setup ( )
   unsigned long wst;
   ResetType = min ( x, 5 );
 #if defined DEBUG
-  WDT_Disable(WDT);
+  WDT_Disable ( WDT );
   Serial.begin ( 9600 );
   if ( ResetType != 2 ) // not a watchdog reset
   {
@@ -886,11 +889,13 @@ void ResetWiFi ( void )
   ImStillAlive ( );
 #if defined DEBUG
   wifi.begin ( 57600, true ); // requires that the wifi interface be configured likewise!!
-//  wifi.setDebug ( true );
 #else
   wifi.begin ( 57600, true );
 #endif
-  for ( i=0; i<50; i++ )
+#if defined WIFIDEBUG
+  wifi.setDebug ( true );
+#endif
+  for ( i=0; i<100; i++ )
   {
     delay ( i );
     ImStillAlive ( ); // just to blink the LED, really
@@ -924,6 +929,10 @@ void MaybeCancelAlert ( )
     theSign.CancelPriorityTextFile ( );
   }
 }
+
+// ********************
+// statistics functions
+// ********************
 
 void ShowStatistics ( )
 {

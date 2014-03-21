@@ -10,7 +10,7 @@ To avoid "flashing" behavior when updating the strings, the sign will use a stri
 
 In addition, when predicted minutes is zero, a priority alert will be displayed with text similar to the following:
 
-< < < 77: NOW! > > >
+<<<77: NOW!>>>
 
 in flashing letters, for 12 seconds
 
@@ -41,6 +41,8 @@ a-?	S	32	36	<companion string files for routes>	-none-
 
 After counting routes, configure sign files and remember the first alert file. All the text files should be setup to never display, and we will use the Set Run Sequence command to configure which files to display (Write Special Function "." )
 
+A button on the device allows the user to "page" through some statistics maintained by the sign. The stats display will timeout after a few seconds, but if the button is pressed prior to the timeout, the display will advance to the next page. If the user presses the button while the last page is being displayed, the stats display is cancelled.
+
 Wiring
 ======
 
@@ -65,18 +67,19 @@ Enhancements
 **Re-organize by "direction" and display the direction title as a string file
   -- explains 350 predictions appearing to be out of order
 Maybe change date time scroll to Date, then Time, then rest of sequence
-Track power-ups, resets, etc. in NV storage??
+Track power-ups, resets, etc. in NV storage, and add to stats??
 
 Bugs
 ====
 Cancel Alerts when they stop showing up, even if not expired -- maybe? awaiting any feedback from group
 On startup, sometimes hit watchdog -- why?
-Saw some cases where 79 showed a Now that shouldn't have -- why? Is it significant that 79 is the first to be listed in XML?
-Also saw cases where Now had an asterisk, and some other short times did as well, suggesting some flags aren't getting cleared appropriately.
+Saw some cases where 79 showed a Now that shouldn't have -- why? Is it significant that 79 is the first to be listed in XML? 79 Seems to sometimes have just one vehicle, so tracking tripTag should help.
+Also saw cases where Now had an asterisk, and some other short times did as well, suggesting some flags aren't getting cleared appropriately -- hopefully same as above.
+Maybe wait longer on WiFi Reset?
 
 Enclosure
 =========
-The enclosure only needs to be big enough for the DigiX and a small Perma-Proto board. Ideally, one end of the case will have the RJ jack for the serial cable, a power input, and a short power output cable coming out. Internally, the power should split, with one half going back out for the BB, and the other going into the DigiX. Needs a short 6-conductor RJ cord as well. Perhaps a couple of LEDs to indicate wifi reset or other interesting states. Two buttons: one for reset, the other for paging through statistics.
+The enclosure only needs to be big enough for the DigiX and a small Perma-Proto board. Ideally, one end of the case will have the RJ jack for the serial cable, a power input, and a short power output cable coming out. Internally, the power should split, with one half going back out for the BB, and the other going into the DigiX. Needs a short 6-conductor RJ cord as well. Perhaps a couple of LEDs to indicate wifi reset or other interesting states. Two buttons: one for reset, the other for paging through statistics. Power supply for BetaBrite is 7.5V, so fine for DigiX as well.
 
 Open Questions
 ==== =========
