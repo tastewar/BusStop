@@ -15,7 +15,7 @@
 #include <DigiFi.h>
 #include <LinkedList.h>
 // next file needs to include one definition for the private MBTA key, like #define MBTAAPIKeyPrivate "wX9NwuHnZU2ToO7GmGR9uw"
-#include "MBTAKey.h"
+#include "APIKeys.h"
 
 // ***********
 // Definitions
@@ -25,6 +25,7 @@
 #define TIME_ZONE_OFFSET -14400
 // URL parts
 #define StopNumber "2282"
+// 2299 -- near Porter (outbound); 2282 -- near Home (outbound); 2260 -- at Broadway (inbound); 17922 at Park st (inbound)
 #define Outbound "0"
 #define Inbound "1"
 #define NextBusServer "webservices.nextbus.com"
@@ -252,12 +253,11 @@ void ConfigureDisplay ( )
   // CLEAR MEMORY
   theSign.StartMemoryConfigurationCommand ( );
   theSign.EndMemoryConfigurationCommand ( );
-  delay ( BB_BETWEEN_COMMAND_DELAY );
   // memory configuration
   theSign.StartMemoryConfigurationCommand ( );
-  // MBTA Time label
+  // MBTA Date label
   theSign.SetMemoryConfigurationSection ( DateLabelFile, 1, 20, BB_SFFT_TEXT, true, BB_RT_NEVER );
-  // time string
+  // date string
   theSign.SetMemoryConfigurationSection ( DateStringFile, 1, 54, BB_SFFT_STRING );
   // MBTA Time label
   theSign.SetMemoryConfigurationSection ( TimeLabelFile, 1, 20, BB_SFFT_TEXT, true, BB_RT_NEVER );
@@ -266,29 +266,36 @@ void ConfigureDisplay ( )
   // Alert label
   theSign.SetMemoryConfigurationSection ( AlertLabelFile, 1, 16, BB_SFFT_STRING );
   // route labels
+  DebugOut ( "configuring " );
+  DebugOut ( numRoutes );
+  DebugOutLn ( " routes starting at A" );
   theSign.SetMemoryConfigurationSection ( 'A', numRoutes, 24, BB_SFFT_TEXT, true, BB_RT_NEVER );
   // route predictions
   theSign.SetMemoryConfigurationSection ( 'a', numRoutes, 36, BB_SFFT_STRING );
   firstAlertFile = signFile;
   // alert text files
-  theSign.SetMemoryConfigurationSection ( signFile, 26-numRoutes, 12, BB_SFFT_TEXT, true, BB_RT_NEVER );
+  DebugOut ( "configuring " );
+  DebugOut ( 26-numRoutes );
+  DebugOut ( " alerts starting at " );
+  DebugOutLn ( 'A'+numRoutes );
+  theSign.SetMemoryConfigurationSection ( 'A'+numRoutes, 26-numRoutes, 12, BB_SFFT_TEXT, true, BB_RT_NEVER );
   // alert string files
-  theSign.SetMemoryConfigurationSection ( signFile+0x20, 26-numRoutes, BB_MAX_STRING_FILE_SIZE, BB_SFFT_STRING );
+  theSign.SetMemoryConfigurationSection ( 'a'+numRoutes, 26-numRoutes, BB_MAX_STRING_FILE_SIZE, BB_SFFT_STRING );
   theSign.EndMemoryConfigurationCommand ( );
   //
   // static content
   //
   theSign.BeginCommand ( );
   theSign.BeginNestedCommand ( );
-  theSign.WriteTextFileNested ( DateLabelFile, datestuff, BB_COL_GREEN );
+  theSign.WriteTextFileNested ( DateLabelFile, datestuff, BB_COL_GREEN, BB_DP_TOPLINE, BB_DM_ROTATE );
   theSign.EndNestedCommand ( );
   theSign.BeginNestedCommand ( );
-  theSign.WriteTextFileNested ( TimeLabelFile, timestuff, BB_COL_GREEN, BB_DP_TOPLINE, BB_DM_WIPELEFT );
+  theSign.WriteTextFileNested ( TimeLabelFile, timestuff, BB_COL_GREEN, BB_DP_TOPLINE, BB_DM_AUTOMODE );
   theSign.EndNestedCommand ( );
   theSign.BeginNestedCommand ( );
   theSign.WriteStringFileNested ( AlertLabelFile, "Alert: " );
   theSign.EndNestedCommand ( );
-  s = RouteList.size ( );
+  s = numRoutes;
   for ( i=0; i<s; i++ )
   {
     char  buf[64];
@@ -298,12 +305,16 @@ void ConfigureDisplay ( )
     theSign.WriteTextFileNested ( pRoute->signFile, buf, BB_COL_YELLOW );
     theSign.EndNestedCommand ( );
   }
-  for ( i=0; i<(26-s); i++ )
+  for ( i=0; i<min((26-s),10); i++ )
   {
-    AlertFileText[3]=signFile+0x20+i; // lower case version of Alert file label
+    AlertFileText[3]='A'+numRoutes+0x20+i; // lower case version of Alert file label
     theSign.BeginNestedCommand ( );
-    theSign.WriteTextFileNested ( signFile+i, AlertFileText, BB_COL_AMBER );
+    theSign.WriteTextFileNested ( 'A'+numRoutes+i, AlertFileText, BB_COL_AMBER );
     theSign.EndNestedCommand ( );
+    DebugOut ( "TEXT file " );
+    DebugOut ( 'A'+numRoutes+i );
+    DebugOut ( " associated with STRING file " );
+    DebugOutLn ( 'A'+numRoutes+0x20+i );
   }
   theSign.EndCommand ( );
 }
@@ -417,7 +428,7 @@ void MaybeUpdateDisplay ( )
         temp[0] = pAlert->Message[MaxPriorityMessageLength-3];
         pAlert->Message[MaxPriorityMessageLength-1] = '.';
       }
-      theSign.WritePriorityTextFile ( pAlert->Message, BB_COL_ORANGE, BB_DP_TOPLINE );
+      theSign.WritePriorityTextFile ( pAlert->Message, BB_COL_ORANGE, BB_DP_TOPLINE, BB_DM_SPECIAL, BB_SDM_NEWSFLASH );
       if ( diff < 0 )
       { // restore saved characters
         pAlert->Message[MaxPriorityMessageLength] = temp[3];
@@ -429,7 +440,11 @@ void MaybeUpdateDisplay ( )
     }
     if ( !pAlert->displayed )
     {
-      theSign.WriteStringFile ( pAlert->signFile+0x20, pAlert->Message );
+      DebugOut ( "displaying alert " );
+      DebugOutLn ( pAlert->Message );
+      DebugOut ( "signFile " );
+      DebugOutLn ( (pAlert->signFile)+0x20 );
+      theSign.WriteStringFile ( (pAlert->signFile)+0x20, pAlert->Message );
       pAlert->displayed = true;
     }
     tempRunSeq[runSeqIndex++]=pAlert->signFile;

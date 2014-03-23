@@ -70,14 +70,16 @@ Enhancements
   -- explains 350 predictions appearing to be out of order
 Maybe change date time scroll to Date, then Time, then rest of sequence
 Track power-ups, resets, etc. in NV storage, and add to stats??
+Look into http://timezonedb.com/api for time
+Move route acquisition to loop, just don't attempt to get predictions until we have it -- NO, need it to configure sign.
+Get Time first, so we can display stuff early.
 
 Bugs
 ====
-Cancel Alerts when they stop showing up, even if not expired -- maybe? awaiting any feedback from group
-On startup, sometimes hit watchdog -- why?
-Saw some cases where 79 showed a Now that shouldn't have -- why? Is it significant that 79 is the first to be listed in XML? 79 Seems to sometimes have just one vehicle, so tracking tripTag should help.
-Also saw cases where Now had an asterisk, and some other short times did as well, suggesting some flags aren't getting cleared appropriately -- hopefully same as above.
-Maybe wait longer on WiFi Reset?
+1. On startup, sometimes hit watchdog -- why? same reason as other places, most likely.
+2. Saw some cases where 79 showed a Now that shouldn't have -- why? Is it significant that 79 is the first to be listed in XML? 79 Seems to sometimes have just one vehicle, so tracking tripTag should help.
+3. Also saw cases where Now had an asterisk, and some other short times did as well, suggesting some flags aren't getting cleared appropriately -- hopefully same as above.
+4. Maybe wait longer on WiFi Reset? -- trying
 
 Enclosure
 =========
