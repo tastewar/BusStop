@@ -311,3 +311,17 @@ name/title best for display.
 Nope; not always a number:
 <route route_id="34" route_name="34"/>
 <route tag="34E" title="34E"/>
+
+
+http://api.timezonedb.com/?lat=42.373363494873&lng=-71.1189575195313&key=<YourAPIKey&format=xml
+
+<result>
+ <status>OK</status>
+ <message/>
+ <countryCode>US</countryCode>
+ <zoneName>America/New_York</zoneName>
+ <abbreviation>EDT</abbreviation>
+ <gmtOffset>-14400</gmtOffset>
+ <dst>1</dst>
+ <timestamp>1395591240</timestamp>
+ </result>
