@@ -46,7 +46,7 @@
 // lengths
 #define MaxPriorityMessageLength BB_MAX_STRING_FILE_SIZE
 #define buflen 150
-#define MaxAlertMessageLength 230
+#define MaxAlertMessageLength BB_MAX_STRING_FILE_SIZE // defined by MBTA documentation as 230, but we can only use 125
 #define RunSeqMax 32
 // pins
 #define WiFiResetPin 106
@@ -108,16 +108,17 @@ typedef struct _Pred
   unsigned long  timestamp;
 } Pred;
 
-typedef struct _RoutePred
+typedef struct _RouteDirPred
 {
 // NextBus provides up to 5
   boolean  displayed;
   char     signFile;
   char     routeid[12]; // internal use, alpha-numeric uses no punctuation
   char     routename[12]; // for display
+  char     dirname[60];
   int      activePreds;
   Pred     pred[MaxNextBusPredictions];
-} RoutePred;
+} RouteDirPred;
 
 typedef struct _AlertMsg
 {

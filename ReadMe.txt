@@ -1,20 +1,20 @@
 The intent of this program is to periodically check predicted bus arrival times and display them on a BetaBrite sign. The sign should use one message slot for each route, displaying a string of the form:
 
-Route: arr1, arr2, arr3, arr4, arr5
+Route Direction: arr1, arr2, arr3, arr4, arr5
 
 where Route is the route number, and the arr times are minutes until the predicted arrival times. If the nth time has the "affectedByLayover" flag set, that prediction will be preceded with an asterisk to indicate "approximately," e.g.:
 
-77: 1, 7, 11, *21, *32
+[77] Harvard Station via Mass. Ave.: 1, 7, 11, *21, *32
 
 To avoid "flashing" behavior when updating the strings, the sign will use a string file for predicted times, and a text file for each route, and the route file will reference the corresponding prediction string.
 
-In addition, when predicted minutes is zero, a priority alert will be displayed with text similar to the following:
+In addition, when predicted minutes is less than 2, a priority alert will be displayed with text similar to the following:
 
-<<<77: NOW!>>>
+<<77: NOW!>>
 
 in flashing letters, for 12 seconds
 
-Outside of any alerts, the sign will cycle through displaying the MBTA current time, the current alert (if any) for the programmed stop, and then the list of routes, one at a time.
+Outside of any alerts, the sign will cycle through displaying the current time, the list of route/direction predictions, one at a time, then any active alerts.
 
 If a new alert comes up, it will be displayed as a priority text file for 30 seconds, then the priority file will be cancelled and the alert will remain as an ordinary message in sequence.
 
@@ -71,6 +71,7 @@ Enhancements
      new routeTitle/DirectionsTitle combinations as they come up. But never delete them, just don't display if 0 predictions
   -- explains 350 predictions appearing to be out of order
 Track power-ups, resets, etc. in NV storage, and add to stats??
+Should switch to alertheaders!! Lots less to parse!
 Look into http://timezonedb.com/api for time -- right way to do this is query for gps coordinates. Can be gotten via routeConfig or MBTA command, but annoying
 Could take coords from NextBus routeConfig command (returned early in the "route" tag)
 Get Time first, so we can display stuff early.
@@ -100,3 +101,7 @@ To move into a more general case, we could have the device query for a configura
 Big Re-Org
 === ======
 Would need to have a hierarchy that represented stops, routes, directions.
+
+Could just start with NextBus predictions, and for each route-direction combo, allocate a structure for tracking the predictions. Need to add elements for the direction label.
+
+Can we have 26*125 byte string files, which would hold either predictions or messages. That's 3250 bytes. 26 text files, worst case, each is also 125 bytes, that's 3250 or 6500 total. Even with a few misc, we should be under 8KiB.
