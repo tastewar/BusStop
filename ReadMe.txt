@@ -72,6 +72,7 @@ Enhancements
   -- explains 350 predictions appearing to be out of order
 Track power-ups, resets, etc. in NV storage, and add to stats??
 Look into http://timezonedb.com/api for time -- right way to do this is query for gps coordinates. Can be gotten via routeConfig or MBTA command, but annoying
+Use http://freegeoip.net/xml/ to learn lat/lon!!
 Could take coords from NextBus routeConfig command (returned early in the "route" tag)
 Get Time first, so we can display stuff early.
 Add allocation failures to stats.
