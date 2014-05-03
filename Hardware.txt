@@ -1,0 +1,18 @@
+For Teensy/CC3000, We'll use Serial3 for connection to the BetaBrite:
+
+Teensy RX3 Pin7 --> Max3232BOB R1OUT Pin2
+Teensy TX3 Pin8 --> Max3232BOB T1IN  Pin4
+
+Button -- Pin2
+
+The CC3000 Breakout is connected as follows:
+
+GND  -- GND BUS
+3V3  -- N/C
+VIN  -- 5V BUS
+VBEN -- Pin5
+IRQ  -- Pin3
+CS   -- Pin10 \
+MOSI -- Pin11  \  SPI interface
+MISO -- Pin12  /
+CLK  -- Pin13 /
