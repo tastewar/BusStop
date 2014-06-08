@@ -75,7 +75,7 @@
 // to enable serial out
 // *********************
 
-#define DEBUG
+//#define DEBUG
 //#define WIFIDEBUG
 
 #if defined DEBUG
@@ -166,6 +166,7 @@ uint8_t                 boofer[buflen];
 
 void setup ( )
 {
+  DebugOutLn ( "In setup" );
 #if defined DEBUG
   Serial.begin ( 115200 );
   while ( !Serial.dtr ( ) );
@@ -220,6 +221,12 @@ void setup ( )
   }
   
   DebugOutLn ( "Connected to wifi!" );
+#if defined DEBUG
+  char url[250];
+  Serial.setTimeout ( 60000 );
+  Serial.println(F("Enter to proceed\n"));
+  Serial.readBytesUntil ( 13, url, sizeof(url) );
+#endif
   MBTACountRoutesByStop ( );
   if ( ResetType != 2 )
   { // assume the sign has retained settings
@@ -231,6 +238,7 @@ void setup ( )
 
 void loop ( )
 {
+  DebugOutLn ( "In loop" );
   ImStillAlive ( );
   DHCPandStatusCheck ( );
   MaybeCheckForNewData ( );
@@ -244,11 +252,12 @@ void loop ( )
 
 void MBTACountRoutesByStop ( )
 {
+  DebugOutLn ( "In MBTACountRoutesByStop" );
   ImStillAlive ( );
-  DebugOutLn ( "Getting list of routes for the stop." );
   while ( !GetXML ( MBTAServer, MBTARoutesByStopURL, RouteListXMLCB ) )
   {
     DebugOutLn ( "Retrying route list." );
+    delay ( 1000 );
   }
 }
 
@@ -261,6 +270,7 @@ void ConfigureDisplay ( )
   char          datestuff[3]={BB_FC_CALLSTRING,DateStringFile,'\0'};
   char          timestuff[3]={BB_FC_CALLSTRING,TimeStringFile,'\0'};
   
+  DebugOutLn ( "In ConfigureDisplay" );
   ImStillAlive ( );
   theSign.CancelPriorityTextFile ( );
   // CLEAR MEMORY
@@ -338,6 +348,7 @@ void ConfigureDisplay ( )
 
 void DHCPandStatusCheck ( )
 {
+  DebugOutLn ( "In DHCPandStatusCheck" );
 }
 
 void MaybeUpdateDisplay ( )
@@ -348,6 +359,7 @@ void MaybeUpdateDisplay ( )
   RoutePred      *pRoute;
   AlertMsg       *pAlert;
 
+  DebugOutLn ( "In MaybeUpdateDisplay" );
   ImStillAlive ( );
   MaybeCancelAlert ( );
   MaybeUpdateDateAndTime ( );
@@ -476,6 +488,7 @@ void MaybeCheckForNewData ( )
 {
   static unsigned char  which;
 
+  DebugOutLn ( "In MaybeCheckForNewData" );
   if ( millis ( ) - LastCheckTime > MilliSecondsBetweenChecks )
   {
     switch ( which )
@@ -502,20 +515,20 @@ void MaybeCheckForNewData ( )
 
 void MBTACheckTime ( )
 {
-  DebugOutLn ( "Checking the time..." );
+  DebugOutLn ( "In MBTACheckTime" );
   GetXML ( MBTAServer, MBTATimeURL, ServerTimeXMLCB );
 }
 
 void MBTACheckAlerts ( )
 {
-  DebugOutLn ( "Checking alerts..." );
+  DebugOutLn ( "In MBTACheckAlerts" );
   AlertParseStart = millis ( );
   if ( GetXML ( MBTAServer, MBTAAlertsByStopURL, AlertsXMLCB ) ) LastSuccessfulAlertParse = AlertParseStart;
 }
 
 void NextBusCheckPredictions ( )
 {
-  DebugOutLn ( "Checking predictions..." );
+  DebugOutLn ( "In NextBusCheckPredictions" );
   GetXML ( NextBusServer, NextBusPredictionURL, PredictionsXMLCB );
 }
 
@@ -526,8 +539,9 @@ void NextBusCheckPredictions ( )
 boolean GetXML ( char *ServerName, char *Page, XMLcallback fcb )
 {
   bool     failed=false;
-  uint32_t ip = 0L, t;
+  uint32_t ip = 0L, t=millis();
 
+  DebugOutLn ( "In GetXML" );
   XMLDone = false;
   ImStillAlive ( );
   xml.init ( (uint8_t*)&boofer, buflen, fcb );
@@ -539,7 +553,6 @@ boolean GetXML ( char *ServerName, char *Page, XMLcallback fcb )
     DebugOutLn ( "." );
     delay(100);
   }
-
   if ( 0L == ip ) return false;
   
   client = cc3000.connectTCP ( ip, 80 );
@@ -955,7 +968,7 @@ void MaybeUpdateDateAndTime ( )
     else pm = false;
     if ( DisplayHour == 0 ) DisplayHour = 12;
     
-    sprintf ( buf, "%sday, %d %s %d", DayNames[weekday(dt)], day(dt), MonthNames[month(dt)-1], year(dt) );
+    sprintf ( buf, "%sday, %d %s %d", DayNames[weekday(dt)-1], day(dt), MonthNames[month(dt)-1], year(dt) );
     theSign.WriteStringFile ( DateStringFile, buf );
     sprintf ( buf, "%d:%02d %s", DisplayHour, minute(dt), pm ? "PM" : "AM" );
     theSign.WriteStringFile ( TimeStringFile, buf );
