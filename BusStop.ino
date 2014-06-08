@@ -1,18 +1,20 @@
 // Author: Tom Stewart
-// Date: March 2014
-// Version: 0.80
+// Date: June 2014
+// Version: 0.85
 
 // *********
 // Libraries
 // *********
 
+#include <Adafruit_CC3000.h>
+#include <ccspi.h>
+#include <SPI.h>
 #include <BB2DEFS.h>
 #include <BETABRITE2.h>
 #include <Wire.h>
 #include <stdint.h>
 #include <RTClib.h>
 #include <TinyXML.h>
-#include <DigiFi.h>
 #include <LinkedList.h>
 // next file needs to include one definition for the private MBTA key, like #define MBTAAPIKeyPrivate "wX9NwuHnZU2ToO7GmGR9uw"
 #include "APIKeys.h"
@@ -21,7 +23,7 @@
 // Definitions
 // ***********
 
-#define Version "0.80"
+#define Version "0.85"
 #define TIME_ZONE_OFFSET -14400
 // URL parts
 #define StopNumber "2282"
@@ -40,6 +42,8 @@
 #define MBTAScheduleByStopURL MBTARootURL "schedulebystop" MBTAAPIKey "&stop=" StopNumber "&direction=" Outbound
 #define MBTAAlertsByStopURL MBTARootURL "alertsbystop" MBTAAPIKey "&stop=" StopNumber
 // times
+#define ConnectTimeout 5000
+#define DNSTimeout 5000
 #define MilliSecondsBetweenChecks 10000
 #define PriorityTime 12000
 #define MinTimeBtwnButtonPresses 500
@@ -49,8 +53,7 @@
 #define MaxAlertMessageLength 230
 #define RunSeqMax 32
 // pins
-#define WiFiResetPin 106
-#define LEDPin 13
+#define LEDPin 14
 #define StatsButtonPin 2
 // other numbers...
 #define MaxWiFiProblems 3
@@ -61,7 +64,11 @@
 #define TimeLabelFile  '3'
 #define TimeStringFile '4'
 #define AlertLabelFile '5'
-
+// These are the interrupt and control pins
+#define ADAFRUIT_CC3000_IRQ   3  // MUST be an interrupt pin!
+// These can be any two pins
+#define ADAFRUIT_CC3000_VBAT  5
+#define ADAFRUIT_CC3000_CS    10
 
 // *********************
 // Debugging definitions
@@ -137,8 +144,10 @@ typedef struct _AlertMsg
 LinkedList<AlertMsg*>   ActiveAlertList = LinkedList<AlertMsg*>();
 LinkedList<AlertMsg*>   FreeAlertList = LinkedList<AlertMsg*>();
 LinkedList<RoutePred*>  RouteList = LinkedList<RoutePred*>();
-DigiFi                  wifi;
-BETABRITE               theSign ( Serial2 );
+
+Adafruit_CC3000         cc3000 = Adafruit_CC3000(ADAFRUIT_CC3000_CS, ADAFRUIT_CC3000_IRQ, ADAFRUIT_CC3000_VBAT, SPI_CLOCK_DIVIDER);
+Adafruit_CC3000_Client  client;
+BETABRITE               theSign ( Serial3 );
 Stats                   stats;
 unsigned long           LastCheckTime, MBTAEpochTime, TimeTimeStamp, LastPriorityDisplayTime, LastSuccessfulPredictionTime,
                         AlertParseStart, LastSuccessfulAlertParse;
@@ -158,15 +167,16 @@ uint8_t                 boofer[buflen];
 
 void setup ( )
 {
+  /* setup watchdog & note reset type
   unsigned char x = ( REG_RSTC_SR & RSTC_SR_RSTTYP_Msk ) >> RSTC_SR_RSTTYP_Pos;
   unsigned long wst;
   ResetType = min ( x, 5 );
 #if defined DEBUG
   WDT_Disable ( WDT );
-  Serial.begin ( 9600 );
+  Serial.begin ( 115200 );
   if ( ResetType != 2 ) // not a watchdog reset
   {
-    while ( !Serial.available ( ) )
+    while ( !Serial.dtr ( ) )
     {
       DebugOutLn ( "Enter any key to begin" );
       delay ( 1000 );
@@ -176,15 +186,13 @@ void setup ( )
   unsigned long wdp_ms = 2048; // 8 seconds
   WDT_Enable( WDT, 0x2000 | wdp_ms | ( wdp_ms << 16 ));
 #endif
-  pinMode ( WiFiResetPin, OUTPUT );
+  */
   pinMode ( LEDPin, OUTPUT );
   pinMode ( StatsButtonPin, INPUT_PULLUP );
   attachInterrupt ( 2, StatsButtonISR, RISING );
-  digitalWrite ( WiFiResetPin, HIGH );
   digitalWrite ( LEDPin, LOW );
-  Serial2.begin ( 9600 );
-  ResetWiFi ( );
-  DebugOutLn ( "Starting setup..." );
+  Serial3.begin ( 9600 );
+  DebugOutLn ( F("Starting setup...") );
   if ( ResetType == 2 )
   {
     theSign.CancelPriorityTextFile ( );
@@ -193,18 +201,20 @@ void setup ( )
   {
     theSign.WritePriorityTextFile ( "BusStopSign v" Version " starting up..." );
   }
-  wst = millis ( );
-  do
+  DebugOutLn(F("Trying to reconnect using SmartConfig values ..."));
+  if (!cc3000.begin(false, true))
   {
-    if ( millis ( ) - wst > 5000 )
-    {
-      DebugOutLn ( "Error connecting to WiFi network" );
-      ResetWiFi ( );
-      ImStillAlive ( );
-      wst = millis ( );
-    }
-    delay ( 10 );
-  } while ( wifi.ready ( ) != 1 );
+    DebugOutLn(F("Unable to re-connect!? Did you run the SmartConfigCreate"));
+    DebugOutLn(F("sketch to store your connection details?"));
+    while(1);
+  }
+
+  DebugOutLn ( F("\nRequesting DHCP") );
+  while ( !cc3000.checkDHCP ( ) )
+  {
+    delay ( 100 ); // ToDo: Insert a DHCP timeout!
+    ImStillAlive ( );
+  }
   
   DebugOutLn ( "Connected to wifi!" );
   MBTACountRoutesByStop ( );
@@ -512,30 +522,42 @@ void NextBusCheckPredictions ( )
 
 boolean GetXML ( char *ServerName, char *Page, XMLcallback fcb )
 {
-  bool  failed=false;
+  bool     failed=false;
+  uint32_t ip = 0L, t;
 
   XMLDone = false;
   ImStillAlive ( );
   xml.init ( (uint8_t*)&boofer, buflen, fcb );
   stats.connatt++;
-  if ( wifi.connect ( ServerName, 80 ) == 1 )
+  while((0L == ip) && ((millis() - t) < DNSTimeout))
+  {
+    DebugOutLn ( "!" );
+    if(cc3000.getHostByName( ServerName, &ip)) break;
+    DebugOutLn ( "." );
+    delay(100);
+  }
+
+  if ( 0L == ip ) return false;
+  
+  client = cc3000.connectTCP ( ip, 80 );
+  if ( client.connected ( ) )
   {
     ImStillAlive ( );
     stats.connsucc++;
     unsigned long tim;
-    wifi.print ( "GET " );
-    wifi.print ( Page );
-    wifi.print ( " HTTP/1.1\r\nHost: " );
-    wifi.println ( ServerName );
-    wifi.println ( "Connection: close" );
-    wifi.println ( "Accept: application/xml\r\n" );
+    client.print ( "GET " );
+    client.print ( Page );
+    client.print ( " HTTP/1.1\r\nHost: " );
+    client.println ( ServerName );
+    client.println ( "Connection: close" );
+    client.println ( "Accept: application/xml\r\n" );
     tim  = millis ( );
     while ( true )
     {
-      if ( wifi.available ( ) )
+      if ( client.available ( ) )
       {
         tim = millis ( );
-        char c = wifi.read ( );
+        char c = client.read ( );
 	// "<" should be the first char of the body
 	// we simply drop any characters before that
 	if ( c == '<' )
@@ -548,7 +570,7 @@ boolean GetXML ( char *ServerName, char *Page, XMLcallback fcb )
       {
         ImStillAlive ( );
         DebugOutLn ( "Timed out 1." );
-        wifi.stop ( );
+        cc3000.disconnect ( );
         stats.connto1++;
         failed = true;
         break;
@@ -558,25 +580,25 @@ boolean GetXML ( char *ServerName, char *Page, XMLcallback fcb )
     tim  = millis ( );
     while ( !failed )
     {
-      if ( wifi.available ( ) )
+      if ( client.available ( ) )
       {
-        char c = wifi.read ( );
+        char c = client.read ( );
         xml.processChar ( c );
         tim = millis ( );
       }
-      else if ( !wifi.connected ( ) )
+      else if ( !client.connected ( ) )
       {
         DebugOutLn ( "No longer connected." );
         stats.connclz++;
         failed = true;
-        wifi.stop ( );
+        cc3000.disconnect ( );
       }
       else if ( millis ( ) - tim > 1000 )
       {
         DebugOutLn ( "Timed out 2" );
         stats.connto2++;
         failed = true;
-        wifi.stop ( );
+        cc3000.disconnect ( );
       }
     }
   }
@@ -943,24 +965,12 @@ void ResetWiFi ( void )
 {
   int  i;
 
-  // requires SJ4 to be soldered closed (non-default) and SJ3 to be cut open (default)
   ImStillAlive ( );
   DebugOutLn ( "* * * * Resetting WiFi module! * * * *" );
   WiFiProblems = 0;
-  digitalWrite ( WiFiResetPin, LOW );
-  delay ( 15 );
-  digitalWrite ( WiFiResetPin, HIGH );
   ImStillAlive ( );
   delay ( 2000 );
   ImStillAlive ( );
-#if defined DEBUG
-  wifi.begin ( 57600, true ); // requires that the wifi interface be configured likewise!!
-#else
-  wifi.begin ( 57600, true );
-#endif
-#if defined WIFIDEBUG
-  wifi.setDebug ( true );
-#endif
   for ( i=0; i<100; i++ )
   {
     delay ( i );
@@ -975,7 +985,7 @@ void ImStillAlive ( )
   static unsigned char  LastStatsReq;
 
 #if !defined DEBUG
-  WDT_Restart ( WDT );
+  //WDT_Restart ( WDT );
 #endif
   ledon = !ledon;
   digitalWrite ( LEDPin, ledon ? HIGH : LOW );
