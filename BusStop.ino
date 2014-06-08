@@ -11,9 +11,8 @@
 #include <SPI.h>
 #include <BB2DEFS.h>
 #include <BETABRITE2.h>
-#include <Wire.h>
 #include <stdint.h>
-#include <RTClib.h>
+#include <Time.h>  
 #include <TinyXML.h>
 #include <LinkedList.h>
 // next file needs to include one definition for the private MBTA key, like #define MBTAAPIKeyPrivate "wX9NwuHnZU2ToO7GmGR9uw"
@@ -76,7 +75,7 @@
 // to enable serial out
 // *********************
 
-//#define DEBUG
+#define DEBUG
 //#define WIFIDEBUG
 
 #if defined DEBUG
@@ -167,7 +166,11 @@ uint8_t                 boofer[buflen];
 
 void setup ( )
 {
-  /* setup watchdog & note reset type
+#if defined DEBUG
+  Serial.begin ( 115200 );
+  while ( !Serial.dtr ( ) );
+#endif
+/* setup watchdog & note reset type
   unsigned char x = ( REG_RSTC_SR & RSTC_SR_RSTTYP_Msk ) >> RSTC_SR_RSTTYP_Pos;
   unsigned long wst;
   ResetType = min ( x, 5 );
@@ -939,11 +942,11 @@ void MaybeUpdateDateAndTime ( )
   static uint8_t  LastDisplayedMins=99;
   char            buf[64];
   bool            pm;
-  DateTime        dt ( CurrentEpochTime ( ) + TIME_ZONE_OFFSET );
+  time_t          dt = CurrentEpochTime ( ) + TIME_ZONE_OFFSET;
   
-  if ( dt.minute ( ) != LastDisplayedMins )
+  if ( minute ( dt ) != LastDisplayedMins )
   {
-    uint8_t DisplayHour = dt.hour ( );
+    uint8_t DisplayHour = hour ( dt );
     if ( DisplayHour >= 12 )
     {
       pm = true;
@@ -952,12 +955,12 @@ void MaybeUpdateDateAndTime ( )
     else pm = false;
     if ( DisplayHour == 0 ) DisplayHour = 12;
     
-    sprintf ( buf, "%sday, %d %s %d", DayNames[dt.dayOfWeek()], dt.day(), MonthNames[dt.month()-1], dt.year() );
+    sprintf ( buf, "%sday, %d %s %d", DayNames[weekday(dt)], day(dt), MonthNames[month(dt)-1], year(dt) );
     theSign.WriteStringFile ( DateStringFile, buf );
-    sprintf ( buf, "%d:%02d %s", DisplayHour, dt.minute(), pm ? "PM" : "AM" );
+    sprintf ( buf, "%d:%02d %s", DisplayHour, minute(dt), pm ? "PM" : "AM" );
     theSign.WriteStringFile ( TimeStringFile, buf );
     DebugOutLn ( buf );
-    LastDisplayedMins = dt.minute ( );
+    LastDisplayedMins = minute ( dt );
   }
 }
 
