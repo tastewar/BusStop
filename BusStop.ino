@@ -166,10 +166,10 @@ uint8_t                 boofer[buflen];
 
 void setup ( )
 {
-  DebugOutLn ( "In setup" );
 #if defined DEBUG
   Serial.begin ( 115200 );
   while ( !Serial.dtr ( ) );
+  DebugOutLn ( "In setup" );
 #endif
 /* setup watchdog & note reset type
   unsigned char x = ( REG_RSTC_SR & RSTC_SR_RSTTYP_Msk ) >> RSTC_SR_RSTTYP_Pos;
@@ -238,7 +238,7 @@ void setup ( )
 
 void loop ( )
 {
-  DebugOutLn ( "In loop" );
+  DebugOut ( " . " );
   ImStillAlive ( );
   DHCPandStatusCheck ( );
   MaybeCheckForNewData ( );
@@ -252,7 +252,7 @@ void loop ( )
 
 void MBTACountRoutesByStop ( )
 {
-  DebugOutLn ( "In MBTACountRoutesByStop" );
+  DebugOut ( " 1 " );
   ImStillAlive ( );
   while ( !GetXML ( MBTAServer, MBTARoutesByStopURL, RouteListXMLCB ) )
   {
@@ -348,7 +348,7 @@ void ConfigureDisplay ( )
 
 void DHCPandStatusCheck ( )
 {
-  DebugOutLn ( "In DHCPandStatusCheck" );
+  DebugOut ( " 2 " );
 }
 
 void MaybeUpdateDisplay ( )
@@ -359,7 +359,7 @@ void MaybeUpdateDisplay ( )
   RoutePred      *pRoute;
   AlertMsg       *pAlert;
 
-  DebugOutLn ( "In MaybeUpdateDisplay" );
+  DebugOut ( " 3 " );
   ImStillAlive ( );
   MaybeCancelAlert ( );
   MaybeUpdateDateAndTime ( );
@@ -488,7 +488,7 @@ void MaybeCheckForNewData ( )
 {
   static unsigned char  which;
 
-  DebugOutLn ( "In MaybeCheckForNewData" );
+  DebugOut ( " 4 " );
   if ( millis ( ) - LastCheckTime > MilliSecondsBetweenChecks )
   {
     switch ( which )
@@ -515,20 +515,20 @@ void MaybeCheckForNewData ( )
 
 void MBTACheckTime ( )
 {
-  DebugOutLn ( "In MBTACheckTime" );
+  DebugOut ( " 5 " );
   GetXML ( MBTAServer, MBTATimeURL, ServerTimeXMLCB );
 }
 
 void MBTACheckAlerts ( )
 {
-  DebugOutLn ( "In MBTACheckAlerts" );
+  DebugOut ( " 6 " );
   AlertParseStart = millis ( );
   if ( GetXML ( MBTAServer, MBTAAlertsByStopURL, AlertsXMLCB ) ) LastSuccessfulAlertParse = AlertParseStart;
 }
 
 void NextBusCheckPredictions ( )
 {
-  DebugOutLn ( "In NextBusCheckPredictions" );
+  DebugOut ( " 7 " );
   GetXML ( NextBusServer, NextBusPredictionURL, PredictionsXMLCB );
 }
 
@@ -541,17 +541,18 @@ boolean GetXML ( char *ServerName, char *Page, XMLcallback fcb )
   bool     failed=false;
   uint32_t ip = 0L, t=millis();
 
-  DebugOutLn ( "In GetXML" );
+  DebugOut ( " 8 " );
   XMLDone = false;
   ImStillAlive ( );
   xml.init ( (uint8_t*)&boofer, buflen, fcb );
   stats.connatt++;
   while((0L == ip) && ((millis() - t) < DNSTimeout))
   {
-    DebugOutLn ( "!" );
+    DebugOut ( "-" );
     if(cc3000.getHostByName( ServerName, &ip)) break;
-    DebugOutLn ( "." );
+    DebugOut ( "*" );
     delay(100);
+    ImStillAlive ( );
   }
   if ( 0L == ip ) return false;
   
@@ -624,7 +625,7 @@ boolean GetXML ( char *ServerName, char *Page, XMLcallback fcb )
     failed = true;
     DebugOutLn ( "Failed to connect :-(" );
   }
-  if ( XMLDone ) DebugOutLn ( "Successful GetXML!" );
+  if ( XMLDone ) DebugOut ( " 10 " );
   else if ( ++stats.connincom % MaxWiFiProblems == 0 ) ResetWiFi ( );
   ImStillAlive ( );
   return XMLDone;
@@ -999,12 +1000,19 @@ void ImStillAlive ( )
 {
   static bool           ledon=false;
   static unsigned char  LastStatsReq;
+  static unsigned long  old;
+  unsigned long         nw;
 
 #if !defined DEBUG
   //WDT_Restart ( WDT );
 #endif
-  ledon = !ledon;
-  digitalWrite ( LEDPin, ledon ? HIGH : LOW );
+  nw = millis ( ) >> 7;
+  if ( nw != old )
+  {
+    ledon = !ledon;
+    digitalWrite ( LEDPin, ledon ? HIGH : LOW );
+    old = nw;
+  }
   if ( StatsButtonRequest != LastStatsReq )
   {
     ShowStatistics ( );
